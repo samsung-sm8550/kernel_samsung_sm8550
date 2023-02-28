@@ -1016,6 +1016,23 @@ static int adreno_hwsched_queue_cmds(struct kgsl_device_private *dev_priv,
 
 	user_ts = *timestamp;
 
+	/*
+	 * If there is only one drawobj in the array and it is of
+	 * type SYNCOBJ_TYPE, skip comparing user_ts as it can be 0
+	 */
+	if (!(count == 1 && drawobj[0]->type == SYNCOBJ_TYPE) &&
+		(drawctxt->base.flags & KGSL_CONTEXT_USER_GENERATED_TS)) {
+		/*
+		 * User specified timestamps need to be greater than the last
+		 * issued timestamp in the context
+		 */
+		if (timestamp_cmp(drawctxt->timestamp, user_ts) >= 0) {
+			spin_unlock(&drawctxt->lock);
+			kmem_cache_free(jobs_cache, job);
+			return -ERANGE;
+		}
+	}
+
 	for (i = 0; i < count; i++) {
 
 		switch (drawobj[i]->type) {
@@ -1976,7 +1993,9 @@ static void hwsched_lsr_check(struct work_struct *work)
 {
 	struct adreno_hwsched *hwsched = container_of(work,
 		struct adreno_hwsched, lsr_check_ws);
-	struct kgsl_device *device = kgsl_get_device(0);
+	struct adreno_device *adreno_dev = container_of(hwsched,
+		struct adreno_device, hwsched);
+	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
 
 	mutex_lock(&device->mutex);
 	kgsl_pwrscale_update_stats(device);

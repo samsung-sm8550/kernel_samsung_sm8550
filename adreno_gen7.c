@@ -1353,7 +1353,7 @@ int gen7_perfcounter_remove(struct adreno_device *adreno_dev,
 	int offset = (lock->ifpc_list_len + lock->preemption_list_len) * 2;
 	int i, second_last_offset, last_offset;
 	bool remove_counter = false;
-	u32 pipe = _get_pipeid(groupid);
+	u32 pipe = FIELD_PREP(GENMASK(13, 12), _get_pipeid(groupid));
 
 	if (kgsl_hwlock(lock)) {
 		kgsl_hwunlock(lock);

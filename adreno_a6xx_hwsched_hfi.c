@@ -1433,6 +1433,9 @@ static void a6xx_add_profile_events(struct adreno_device *adreno_dev,
 	struct kgsl_context *context = drawobj->context;
 	struct submission_info info = {0};
 
+	if (!time)
+		return;
+
 	/*
 	 * Here we are attempting to create a mapping between the
 	 * GPU time domain (alwayson counter) and the CPU time domain
