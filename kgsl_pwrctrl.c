@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/interconnect.h>
@@ -25,7 +25,7 @@
 #define KGSL_MAX_BUSLEVELS	20
 
 /* Order deeply matters here because reasons. New entries go on the end */
-static const char * const clocks[] = {
+static const char * const clocks[KGSL_MAX_CLKS] = {
 	"src_clk",
 	"core_clk",
 	"iface_clk",
@@ -406,9 +406,8 @@ static void kgsl_pwrctrl_min_pwrlevel_set(struct kgsl_device *device,
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 
 	mutex_lock(&device->mutex);
-
-	if (level > pwr->min_render_pwrlevel)
-		level = pwr->min_render_pwrlevel;
+	if (level >= pwr->num_pwrlevels)
+		level = pwr->num_pwrlevels - 1;
 
 	/* You can't set a minimum power level lower than the maximum */
 	if (level < pwr->max_pwrlevel)

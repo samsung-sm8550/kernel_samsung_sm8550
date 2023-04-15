@@ -794,9 +794,6 @@ static int a6xx_hwsched_power_off(struct adreno_device *adreno_dev)
 	/* process any profiling results that are available */
 	adreno_profile_process_results(ADRENO_DEVICE(device));
 
-	if (!a6xx_hw_isidle(adreno_dev))
-		dev_err(&gmu->pdev->dev, "GPU isn't idle before SLUMBER\n");
-
 	ret = a6xx_gmu_oob_set(device, oob_gpu);
 	if (ret) {
 		a6xx_gmu_oob_clear(device, oob_gpu);
@@ -854,7 +851,12 @@ static void hwsched_idle_check(struct work_struct *work)
 	if (test_bit(GMU_DISABLE_SLUMBER, &device->gmu_core.flags))
 		goto done;
 
-	if (!atomic_read(&device->active_cnt) && time_is_before_jiffies(device->idle_jiffies)) {
+	if (!atomic_read(&device->active_cnt) &&
+		time_is_before_eq_jiffies(device->idle_jiffies)) {
+		if (!a6xx_hw_isidle(adreno_dev)) {
+			dev_err(device->dev, "GPU isn't idle before SLUMBER\n");
+			gmu_core_fault_snapshot(device);
+		}
 		a6xx_hwsched_power_off(adreno_dev);
 	} else {
 		kgsl_pwrscale_update(device);
