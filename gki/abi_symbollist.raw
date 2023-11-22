@@ -6756,6 +6756,9 @@ ufshcd_shutdown
 ufshcd_suspend_prepare
 ufshcd_system_resume
 ufshcd_system_suspend
+ufshcd_system_freeze
+ufshcd_system_thaw
+ufshcd_system_restore
 ufshcd_transfer_rsp_status
 ufshcd_uic_change_pwr_mode
 ufshcd_uic_hibern8_enter
