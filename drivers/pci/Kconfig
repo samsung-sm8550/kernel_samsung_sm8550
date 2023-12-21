@@ -257,4 +257,30 @@ source "drivers/pci/controller/Kconfig"
 source "drivers/pci/endpoint/Kconfig"
 source "drivers/pci/switch/Kconfig"
 
+config SEC_PCIE
+	depends on PCI_MSM
+	bool "SEC_PCIE feature"
+
+config SEC_PCIE_DEV
+	depends on PCI_MSM
+	bool "SEC_PCIE_DEV dev feature"
+
+config SEC_PCIE_AER
+	depends on PCI_MSM
+	bool "SEC_PCIE_AER feature"
+
+config SEC_PCIE_L1SS
+	depends on PCI_MSM
+	depends on SEC_PCIE
+	bool "SEC_PCIE_L1SS feature"
+
+config SEC_PANIC_PCIE_ERR
+	depends on PCI_MSM
+	depends on SEC_PCIE
+	bool "SEC_PANIC_PCIE_ERR feature"
+
+config SEC_PCIE_KEEP_LINKBW
+	depends on PCI_MSM
+	depends on SEC_PCIE
+	bool "SEC_PCIE_KEEP_LINKBW feature"
 endif

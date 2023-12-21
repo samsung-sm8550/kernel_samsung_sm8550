@@ -1175,6 +1175,10 @@ static inline bool is_migration_disabled(struct task_struct *p)
 #endif
 }
 
+struct rq_guard {
+	u64 guard[8];
+};
+DECLARE_PER_CPU_SHARED_ALIGNED(struct rq_guard, runqueue_guards);
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))

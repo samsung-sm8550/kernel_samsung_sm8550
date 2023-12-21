@@ -112,6 +112,15 @@ static int heap_dt_init(struct device_node *mem_node,
 	}
 	heap->is_nomap =  of_property_read_bool(mem_node, "no-map");
 
+#if defined(CONFIG_RBIN)
+	if (strncmp(rmem->name, "rbin", 4) == 0) {
+		if (!heap->base && !heap->size && rmem->base && rmem->size) {
+			heap->base = rmem->base;
+			heap->size = rmem->size;
+		}
+	}
+#endif
+
 	return ret;
 }
 

@@ -522,6 +522,15 @@ config PROFILER
 	  It exposes APIs for userspace to get system profiling
 	  information.
 
+config MZ_USE_QSEECOM
+	tristate "MZ Crypto TEE Driver"
+	depends on QSEECOM_PROXY
+	help
+	  Enable MZ crypto Trusted Execution Environment support
+	  MZ use crypto function and it will be works in tee
+	  if it's supported
+	  This driver is interface for MZ NWd and MZ ta
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

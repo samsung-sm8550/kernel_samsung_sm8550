@@ -908,7 +908,7 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 				goto out;
 
 			cap_id = (u64) res_entries[i].cap_id_high << 32 |
-					res_entries[i].cap_id_low;
+				res_entries[i].cap_id_low;
 			label = res_entries[i].resource_label;
 			if (gh_vcpu_affinity_set_fn)
 				do {
@@ -960,9 +960,8 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 					GH_MSGQ_DIRECTION_RX, linux_irq);
 				break;
 			case GH_RM_RES_TYPE_VCPU:
-			/* Already populate VCPU resource */
+				/* Already populate VCPU resource */
 				break;
-
 			case GH_RM_RES_TYPE_DB_TX:
 				ret = gh_dbl_populate_cap_info(label, cap_id,
 					GH_MSGQ_DIRECTION_TX, linux_irq);

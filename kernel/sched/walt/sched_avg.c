@@ -14,6 +14,10 @@
 
 #include "walt.h"
 #include "trace.h"
+#include "hyst_qos.h"
+
+struct user_req us_req;
+bool qos_reg;
 
 static DEFINE_PER_CPU(u64, nr_prod_sum);
 static DEFINE_PER_CPU(u64, last_time);
@@ -172,8 +176,7 @@ void sched_update_hyst_times(void)
 		cpu_cap = arch_scale_cpu_capacity(cpu);
 		coloc_busy_pct = sysctl_sched_coloc_busy_hyst_cpu_busy_pct[cpu];
 		per_cpu(hyst_time, cpu) = (BIT(cpu)
-			     & sysctl_sched_busy_hyst_enable_cpus) ?
-			     sysctl_sched_busy_hyst : 0;
+			     & sysctl_sched_busy_hyst_enable_cpus) ? busy_hyst_qos_value : 0;
 		per_cpu(coloc_hyst_time, cpu) = ((BIT(cpu)
 			     & sysctl_sched_coloc_busy_hyst_enable_cpus)
 			     && rtgb_active) ?
@@ -254,8 +257,15 @@ int sched_busy_hyst_handler(struct ctl_table *table, int write,
 
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 
-	if (!ret && write)
+	if (!ret && write) {
+		if (!qos_reg) {
+			hyst_add_request(&us_req, 0, "PerfLock");
+			qos_reg = true;
+		}
+
+		hyst_update_request(&us_req, PM_QOS_MIN_LIMIT, sysctl_sched_busy_hyst);
 		sched_update_hyst_times();
+	}
 
 	return ret;
 }

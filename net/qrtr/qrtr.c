@@ -112,6 +112,12 @@ struct qrtr_sock {
 	struct sockaddr_qrtr peer;
 
 	int state;
+
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+	/* qrtr_ws debugging */
+	char sent_name[TASK_COMM_LEN];
+	pid_t sent_pid;
+#endif
 };
 
 static inline struct qrtr_sock *qrtr_sk(struct sock *sk)
@@ -969,6 +975,27 @@ static void qrtr_backup_deinit(void)
 	skb_queue_purge(&qrtr_backup_hi);
 }
 
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+/**
+ * change qrtr_ws name to last changed one who's net_id/port
+ */
+#define MAX_QRTR_WS_NAME	64
+
+static void qrtr_debug_change_ws_name(struct qrtr_node *node,
+							int src_node, int src_port,
+							int dst_node, int dst_port,
+							char *sent_name, pid_t sent_pid)
+{
+	if (!node->ws || !node->ws->name)
+		return;
+
+	snprintf((char *)node->ws->name, MAX_QRTR_WS_NAME - 1,
+			"qrtr_ws_src_%d_%d_dst_%d_%d_sent_%d_%s",
+			src_node, src_port, dst_node, dst_port,
+			sent_pid, (sent_name ? sent_name : ""));
+}
+#endif
+
 /**
  * qrtr_endpoint_post() - post incoming data
  * @ep: endpoint handle
@@ -1083,10 +1110,18 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 	 */
 	svc_id = qrtr_get_service_id(cb->src_node, cb->src_port);
 	if (cb->type != QRTR_TYPE_DATA || cb->dst_node != qrtr_local_nid) {
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+		qrtr_debug_change_ws_name(node, cb->src_node, cb->src_port,
+						cb->dst_node, cb->dst_port,
+						NULL, -1);
+#endif
 		skb_queue_tail(&node->rx_queue, skb);
 		kthread_queue_work(&node->kworker, &node->read_data);
 		pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
 	} else {
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+		struct qrtr_cb copied_cb = *cb;
+#endif
 		ipc = qrtr_port_lookup(cb->dst_port);
 		if (!ipc) {
 			kfree_skb(skb);
@@ -1099,8 +1134,17 @@ int qrtr_endpoint_post(struct qrtr_endpoint *ep, const void *data, size_t len)
 		}
 
 		/* Force wakeup based on services */
-		if (!xa_load(&node->no_wake_svc, svc_id))
+		if (!xa_load(&node->no_wake_svc, svc_id)) {
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+			qrtr_debug_change_ws_name(node, copied_cb.src_node,
+							copied_cb.src_port,
+							copied_cb.dst_node,
+							copied_cb.dst_port,
+							ipc->sent_name,
+							ipc->sent_pid);
+#endif
 			pm_wakeup_ws_event(node->ws, qrtr_wakeup_ms, true);
+		}
 
 		qrtr_port_put(ipc);
 	}
@@ -1302,6 +1346,28 @@ static void qrtr_hello_work(struct kthread_work *work)
 	qrtr_port_put(ctrl);
 }
 
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+void qrtr_ws_change_name_buffer(struct qrtr_node *node)
+{
+	char *ws_name = NULL;
+
+	if (!node->ws)
+		return;
+
+	ws_name = kzalloc(MAX_QRTR_WS_NAME, GFP_KERNEL);
+
+	if (ws_name) {
+		if (node->ws->name)
+			kfree_const(node->ws->name);
+		strcpy(ws_name, "qrtr_ws");
+		node->ws->name = ws_name;
+
+		pr_info("qrtr: ws name buffer initialized\n");
+	} else
+		pr_err("qrtr: couldn't alloc enough memory for ws name\n");
+}
+#endif
+
 /**
  * qrtr_endpoint_register() - register a new endpoint
  * @ep: endpoint to register
@@ -1369,6 +1435,10 @@ int qrtr_endpoint_register(struct qrtr_endpoint *ep, unsigned int net_id,
 	ep->node = node;
 
 	node->ws = wakeup_source_register(NULL, "qrtr_ws");
+
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+	qrtr_ws_change_name_buffer(node);
+#endif
 
 	kthread_queue_work(&node->kworker, &node->say_hello);
 	return 0;
@@ -1908,6 +1978,12 @@ static int qrtr_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		}
 		qrtr_node_release(srv_node);
 	}
+
+#if IS_ENABLED(CONFIG_QRTR_WS_DEBUG)
+	/* store who sent ipc */
+	strncpy(ipc->sent_name, current->comm, TASK_COMM_LEN - 1);
+	ipc->sent_pid = current->pid;
+#endif
 
 	rc = enqueue_fn(node, skb, type, &ipc->us, addr, msg->msg_flags);
 

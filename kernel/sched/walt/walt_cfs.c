@@ -379,7 +379,9 @@ static void walt_find_best_target(struct sched_domain *sd,
 	unsigned int min_exit_latency = UINT_MAX;
 	int i, start_cpu;
 	long spare_wake_cap, most_spare_wake_cap = 0;
+	long most_spare_wake_cap_target_clusters = LONG_MIN;
 	int most_spare_cap_cpu = -1;
+	int most_spare_cap_target_cluster_cpu = -1;
 	int least_nr_cpu = -1;
 	unsigned int cpu_rq_runnable_cnt = UINT_MAX;
 	int prev_cpu = task_cpu(p);
@@ -489,6 +491,18 @@ retry_ignore_cluster:
 			if (spare_wake_cap > most_spare_wake_cap) {
 				most_spare_wake_cap = spare_wake_cap;
 				most_spare_cap_cpu = i;
+			}
+
+			/*
+			 * Keep track of least loaded cpu which can be used as a
+			 * fallback placement core for BIG rtg task in case all
+			 * the cores are busy,  this is to avoid prev_cpu
+			 * fallback mechanism.
+			 */
+			if ((cluster <= end_index) &&
+				(spare_wake_cap > most_spare_wake_cap_target_clusters)) {
+				most_spare_wake_cap_target_clusters = spare_wake_cap;
+				most_spare_cap_target_cluster_cpu = i;
 			}
 
 			/*
@@ -633,6 +647,9 @@ retry_ignore_cluster:
 	if (unlikely(cpumask_empty(candidates))) {
 		if (most_spare_cap_cpu != -1)
 			cpumask_set_cpu(most_spare_cap_cpu, candidates);
+		else if (most_spare_cap_target_cluster_cpu != -1 && (order_index > 0) &&
+				fbt_env->is_rtg)
+			cpumask_set_cpu(most_spare_cap_target_cluster_cpu, candidates);
 		else if (cpu_active(prev_cpu)
 			 && (cpu_rq(prev_cpu)->nr_running < DIRE_STRAITS_PREV_NR_LIMIT))
 			cpumask_set_cpu(prev_cpu, candidates);
@@ -644,7 +661,7 @@ out:
 	trace_sched_find_best_target(p, min_task_util, start_cpu, cpumask_bits(candidates)[0],
 			     most_spare_cap_cpu, order_index, end_index,
 			     fbt_env->skip_cpu, task_on_rq_queued(p), least_nr_cpu,
-			     cpu_rq_runnable_cnt);
+			     cpu_rq_runnable_cnt, most_spare_cap_target_cluster_cpu);
 }
 
 static inline unsigned long
@@ -1249,6 +1266,9 @@ static inline unsigned int walt_cfs_mvp_task_limit(struct task_struct *p)
 	/* Binder MVP tasks are high prio but have only single slice */
 	if (wts->mvp_prio == WALT_BINDER_MVP)
 		return WALT_MVP_SLICE;
+
+	if (wts->mvp_prio == WALT_LL_PIPE_MVP)
+		return WALT_MVP_LL_SLICE;
 
 	return WALT_MVP_LIMIT;
 }

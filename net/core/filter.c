@@ -136,6 +136,21 @@ int sk_filter_trim_cap(struct sock *sk, struct sk_buff *skb, unsigned int cap)
 	if (err)
 		return err;
 
+	/* INET ingress complete */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	err = security_sock_rcv_skb(sk, skb);
 	if (err)
 		return err;
@@ -150,6 +165,21 @@ int sk_filter_trim_cap(struct sock *sk, struct sk_buff *skb, unsigned int cap)
 		pkt_len = bpf_prog_run_save_cb(filter->prog, skb);
 		skb->sk = save_sk;
 		err = pkt_len ? pskb_trim(skb, max(cap, pkt_len)) : -EPERM;
+
+		/* filter complete */
+		{
+			struct sk_buff *frag_iter;
+
+			skb_walk_frags(skb, frag_iter) {
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n", __func__,
+					(u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
 	}
 	rcu_read_unlock();
 

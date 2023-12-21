@@ -208,12 +208,10 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 
 	if (baselen > len)
 		return NULL;
-
 	elems = ieee802_11_parse_elems(elements, len - baselen, false,
 				       mgmt->bssid, cbss->bssid);
 	if (!elems)
 		return NULL;
-
 	/* In case the signal is invalid update the status */
 	signal_valid = channel == cbss->channel;
 	if (!signal_valid)
@@ -221,14 +219,11 @@ ieee80211_bss_info_update(struct ieee80211_local *local,
 
 	bss = (void *)cbss->priv;
 	ieee80211_update_bss_from_elems(local, bss, elems, rx_status, beacon);
-
 	list_for_each_entry(non_tx_cbss, &cbss->nontrans_list, nontrans_list) {
 		non_tx_bss = (void *)non_tx_cbss->priv;
-
 		ieee80211_update_bss_from_elems(local, non_tx_bss, elems,
 						rx_status, beacon);
 	}
-
 	kfree(elems);
 
 	return bss;

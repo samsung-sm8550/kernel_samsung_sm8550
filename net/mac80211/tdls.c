@@ -1717,7 +1717,6 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 		ret = 0;
 		goto call_drv;
 	}
-
 	elems = ieee802_11_parse_elems(tf->u.chan_switch_resp.variable,
 				       skb->len - baselen, false, NULL, NULL);
 	if (!elems) {
@@ -1730,7 +1729,6 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 		ret = -EINVAL;
 		goto out;
 	}
-
 	if (!elems->ch_sw_timing || !elems->lnk_id) {
 		tdls_dbg(sdata, "TDLS channel switch resp - missing IEs\n");
 		ret = -EINVAL;
@@ -1745,10 +1743,8 @@ ieee80211_process_tdls_channel_switch_resp(struct ieee80211_sub_if_data *sdata,
 		ret = -EINVAL;
 		goto out;
 	}
-
 	params.switch_time = le16_to_cpu(elems->ch_sw_timing->switch_time);
 	params.switch_timeout = le16_to_cpu(elems->ch_sw_timing->switch_timeout);
-
 	params.tmpl_skb =
 		ieee80211_tdls_ch_sw_resp_tmpl_get(sta, &params.ch_sw_tm_ie);
 	if (!params.tmpl_skb) {
@@ -1835,7 +1831,6 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 			 target_channel);
 		return -EINVAL;
 	}
-
 	elems = ieee802_11_parse_elems(tf->u.chan_switch_req.variable,
 				       skb->len - baselen, false, NULL, NULL);
 	if (!elems)
@@ -1846,13 +1841,11 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 		ret = -EINVAL;
 		goto free;
 	}
-
 	if (!elems->ch_sw_timing || !elems->lnk_id) {
 		tdls_dbg(sdata, "TDLS channel switch req - missing IEs\n");
 		ret = -EINVAL;
 		goto free;
 	}
-
 	if (!elems->sec_chan_offs) {
 		chan_type = NL80211_CHAN_HT20;
 	} else {
@@ -1910,7 +1903,6 @@ ieee80211_process_tdls_channel_switch_req(struct ieee80211_sub_if_data *sdata,
 	params.chandef = &chandef;
 	params.switch_time = le16_to_cpu(elems->ch_sw_timing->switch_time);
 	params.switch_timeout = le16_to_cpu(elems->ch_sw_timing->switch_timeout);
-
 	params.tmpl_skb =
 		ieee80211_tdls_ch_sw_resp_tmpl_get(sta,
 						   &params.ch_sw_tm_ie);

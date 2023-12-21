@@ -225,6 +225,21 @@ resubmit:
 
 static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	/* LOCAL_IN chain has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	__skb_pull(skb, skb_network_header_len(skb));
 
 	rcu_read_lock();
@@ -435,6 +450,21 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	struct net_device *dev = skb->dev;
 	int ret;
 
+	/* PRE_ROUTING chain has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
@@ -558,6 +588,21 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
 	   struct net_device *orig_dev)
 {
 	struct net *net = dev_net(dev);
+
+	/* IP RCV start */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
 
 	skb = ip_rcv_core(skb, net);
 	if (skb == NULL)

@@ -249,6 +249,15 @@ config USB_F_FS_IPC_LOGGING
 	 userspace client. Separate IPC log contexts are created for each
 	 function instance at mount time.
 
+config USB_F_CONN_GADGET
+	tristate
+
+config USB_F_SS_MON_GADGET
+	tristate
+
+config USB_F_SS_ACM
+	tristate
+
 # this first set of drivers all depend on bulk-capable hardware.
 
 config USB_CONFIGFS
@@ -350,6 +359,30 @@ config USB_CONFIGFS_RNDIS
 	   XP, you'll need to download drivers from Microsoft's website; a URL
 	   is given in comments found in that info file.
 
+config USB_CONFIGFS_F_CONN_GADGET
+	tristate "Samsung Sidesync function"
+	depends on USB_CONFIGFS
+	select USB_F_CONN_GADGET
+	help
+	  USB Sidesync function support
+
+config USB_CONFIGFS_F_SS_MON_GADGET
+	tristate "F_SAMSUNG gadget"
+	depends on USB_CONFIGFS
+	select USB_F_SS_MON_GADGET
+	help
+	 Driver for control to Samsung Usb device layer
+	 For Samung working scenario and saving debug log, etc
+
+config USB_CONFIGFS_F_SS_ACM
+	tristate "F_SAMSUNG ACM"
+	depends on USB_CONFIGFS
+	depends on TTY
+	select USB_U_SERIAL
+	select USB_F_SS_ACM
+	help
+	 Samsung ACM function support
+
 config USB_CONFIGFS_EEM
 	bool "Ethernet Emulation Model (EEM)"
 	depends on USB_CONFIGFS
@@ -411,6 +444,13 @@ config USB_CONFIGFS_F_FS
 	  of composite gadgets such that some of the functions are
 	  implemented in kernel space (for instance Ethernet, serial or
 	  mass storage) and other are implemented in user space.
+
+config F_CONN_GADGET_DEBUGFS
+      bool "Conn gadget debugfs"
+      depends on USB_CONFIGFS_F_CONN_GADGET
+      default n
+      help
+        SydeSync Debugging
 
 config USB_CONFIGFS_F_ACC
 	bool "Accessory gadget"

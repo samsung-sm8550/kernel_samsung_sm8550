@@ -54,6 +54,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/qcom_dma_heap.h>
+#include <trace/hooks/mm.h>
 
 #include "qcom_dma_heap_secure_utils.h"
 #include "qcom_dynamic_page_pool.h"
@@ -693,6 +694,42 @@ static int create_prefetch_workqueue(void)
 	return 0;
 }
 
+static long get_secure_system_heap_total_kbytes(struct dma_heap *heap)
+{
+	struct qcom_secure_system_heap *sys_heap;
+
+	if (!heap)
+		return 0;
+
+	sys_heap = dma_heap_get_drvdata(heap);
+	if (!sys_heap)
+		return 0;
+
+	return atomic_long_read(&sys_heap->total_allocated) >> 10;
+}
+
+static void qcom_secure_system_heap_show_mem(void *data, unsigned int filter, nodemask_t *nodemask)
+{
+	struct dma_heap *heap = (struct dma_heap *)data;
+	long total_kbytes = get_secure_system_heap_total_kbytes(heap);
+
+	if (total_kbytes == 0)
+		return;
+
+	pr_info("%s: %ld kB\n", dma_heap_get_name(heap), total_kbytes);
+}
+
+static void qcom_secure_system_heap_meminfo(void *data, struct seq_file *m)
+{
+	struct dma_heap *heap = (struct dma_heap *)data;
+	long total_kbytes = get_secure_system_heap_total_kbytes(heap);
+
+	if (total_kbytes == 0)
+		return;
+
+	show_val_meminfo(m, dma_heap_get_name(heap), total_kbytes);
+}
+
 void qcom_secure_system_heap_create(const char *name, const char *secure_system_alias, int vmid)
 {
 	struct dma_heap_export_info exp_info;
@@ -758,6 +795,8 @@ void qcom_secure_system_heap_create(const char *name, const char *secure_system_
 		pr_info("%s: DMA-BUF Heap: Created '%s'\n", __func__, secure_system_alias);
 	}
 
+	register_trace_android_vh_show_mem(qcom_secure_system_heap_show_mem, (void *)heap);
+	register_trace_android_vh_meminfo_proc_show(qcom_secure_system_heap_meminfo, (void *)heap);
 	return;
 
 free_pools:

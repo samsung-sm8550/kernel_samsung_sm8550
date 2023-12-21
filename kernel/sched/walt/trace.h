@@ -1196,12 +1196,14 @@ TRACE_EVENT(sched_find_best_target,
 		 int most_spare_cap,
 		 int order_index, int end_index,
 		 int skip, bool running,
-		 int most_spare_rq_cpu, unsigned int cpu_rq_runnable_cnt),
+		 int most_spare_rq_cpu, unsigned int cpu_rq_runnable_cnt,
+		 int most_spare_cap_target_cluster_cpu),
 
 	TP_ARGS(tsk, min_util, start_cpu, candidates,
 		most_spare_cap,
 		order_index, end_index, skip, running,
-		most_spare_rq_cpu, cpu_rq_runnable_cnt),
+		most_spare_rq_cpu, cpu_rq_runnable_cnt,
+		most_spare_cap_target_cluster_cpu),
 
 	TP_STRUCT__entry(
 		__array(char,		comm, TASK_COMM_LEN)
@@ -1216,6 +1218,7 @@ TRACE_EVENT(sched_find_best_target,
 		__field(bool,		running)
 		__field(int,		most_spare_rq_cpu)
 		__field(unsigned int,	cpu_rq_runnable_cnt)
+		__field(int,		most_spare_cap_target_cluster_cpu)
 		),
 
 	TP_fast_assign(
@@ -1231,9 +1234,10 @@ TRACE_EVENT(sched_find_best_target,
 		__entry->running	= running;
 		__entry->most_spare_rq_cpu	= most_spare_rq_cpu;
 		__entry->cpu_rq_runnable_cnt	= cpu_rq_runnable_cnt;
+		__entry->most_spare_cap_target_cluster_cpu	= most_spare_cap_target_cluster_cpu;
 		),
 
-	TP_printk("pid=%d comm=%s start_cpu=%d candidates=%#lx most_spare_cap=%d order_index=%d end_index=%d skip=%d running=%d min_util=%lu spare_rq_cpu=%d min_runnable=%u",
+	TP_printk("pid=%d comm=%s start_cpu=%d candidates=%#lx most_spare_cap=%d order_index=%d end_index=%d skip=%d running=%d min_util=%lu spare_rq_cpu=%d min_runnable=%u spare_target_cluster_cpu=%d",
 		  __entry->pid, __entry->comm,
 		  __entry->start_cpu,
 		  __entry->candidates,
@@ -1244,7 +1248,8 @@ TRACE_EVENT(sched_find_best_target,
 		  __entry->running,
 		  __entry->min_util,
 		  __entry->most_spare_rq_cpu,
-		  __entry->cpu_rq_runnable_cnt)
+		  __entry->cpu_rq_runnable_cnt,
+		  __entry->most_spare_cap_target_cluster_cpu)
 );
 
 TRACE_EVENT(sched_enq_deq_task,

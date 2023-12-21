@@ -22,13 +22,14 @@
 #include <linux/dma-buf.h>
 #include <linux/dma-resv.h>
 #include <linux/fdtable.h>
+#include <linux/bitmap.h>
 #include "minidump_memory.h"
 #include "../../../mm/slab.h"
 #include "../mm/internal.h"
 
 #define DMA_BUF_HASH_SIZE (1 << 20)
 #define DMA_BUF_HASH_SEED 0x9747b28c
-static bool dma_buf_hash[DMA_BUF_HASH_SIZE];
+static DECLARE_BITMAP(dma_buf_hash, DMA_BUF_HASH_SIZE);
 
 struct priv_buf {
 	char *buf;
@@ -1238,9 +1239,9 @@ static int get_dma_info(const void *data, struct file *file, unsigned int n)
 	dmabuf = (struct dma_buf *)file->private_data;
 	index = jhash(dmabuf, sizeof(struct dma_buf), DMA_BUF_HASH_SEED);
 	index = index  & (DMA_BUF_HASH_SIZE - 1);
-	if (dma_buf_hash[index])
+	if (test_bit(index, dma_buf_hash))
 		return 0;
-	dma_buf_hash[index] = true;
+	set_bit(index, dma_buf_hash);
 	dma_buf_priv->count += 1;
 	ret = scnprintf(buf->buf + buf->offset, buf->size - buf->offset,
 			"%-8s\t%-8s\t%-8s\t%-8s\texp_name\t%-8s\n",
@@ -1304,7 +1305,7 @@ void md_dma_buf_procs(char *m, size_t dump_size)
 				goto err;
 			dma_buf_priv.count = 0;
 			dma_buf_priv.size = 0;
-			memset(dma_buf_hash, 0, sizeof(dma_buf_hash));
+			bitmap_zero(dma_buf_hash, DMA_BUF_HASH_SIZE);
 		}
 	}
 	rcu_read_unlock();

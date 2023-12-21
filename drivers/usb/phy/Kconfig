@@ -276,4 +276,10 @@ config USB_M31_MSM_EUSB2_PHY
 
 	  To compile this driver as a module, choose M here.
 
+config USB_PHY_TUNING_QCOM
+	bool "USB PHY TUNING QCOM"
+	depends on ARCH_QCOM
+	help
+	  Enable this to tune usb phy register.
+
 endmenu

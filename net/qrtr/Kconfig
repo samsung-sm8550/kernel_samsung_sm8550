@@ -91,4 +91,9 @@ config QRTR_BPF_FILTER
 	  functionality in ipc router. It prevents unauthorized users of a
 	  QMI service from accessing it. It also prevents broadcasting local QMI
 	  services to connected SoCs. Say Y here to enable this for auto targets.
+
+config QRTR_WS_DEBUG
+	default y
+	tristate "Wake Source debugging tool"
+
 endif # QRTR

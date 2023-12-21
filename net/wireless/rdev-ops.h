@@ -1494,4 +1494,20 @@ rdev_del_link_station(struct cfg80211_registered_device *rdev,
 	return ret;
 }
 
+static inline int
+rdev_get_link_tid_map_status(struct cfg80211_registered_device *rdev,
+			     struct net_device *dev,
+			     struct cfg80211_mlo_tid_map *map)
+{
+	int ret;
+
+	if (!rdev->ops->get_link_tid_map_status)
+		return -EOPNOTSUPP;
+
+	trace_rdev_get_link_tid_map_status(&rdev->wiphy, dev, map);
+	ret = rdev->ops->get_link_tid_map_status(&rdev->wiphy, dev, map);
+	trace_rdev_return_int(&rdev->wiphy, ret);
+	return ret;
+}
+
 #endif /* __CFG80211_RDEV_OPS */

@@ -112,6 +112,13 @@ struct msm_hsphy {
 
 	int			*param_override_seq;
 	int			param_override_seq_cnt;
+#if IS_ENABLED(CONFIG_USB_NOTIFIER)
+	int			*param_host_override_seq;
+	int			param_host_override_seq_cnt;
+#endif
+#if IS_ENABLED(CONFIG_USB_PHY_TUNING_QCOM)
+	bool			hsphy_tune_init_done;
+#endif
 
 	void __iomem		*phy_rcal_reg;
 	u32			rcal_mask;
@@ -133,6 +140,159 @@ struct msm_hsphy {
 	u8			param_ovrd2;
 	u8			param_ovrd3;
 };
+
+#undef dev_dbg
+#define dev_dbg dev_err
+
+#if IS_ENABLED(CONFIG_USB_PHY_TUNING_QCOM)
+static ssize_t x0_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+
+	return sprintf(buf, "0x%x\n", (readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0) & 0xff));
+}
+static ssize_t x0_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+	u32 val;
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+	sscanf(buf, "%x", &val);
+	phy->param_ovrd0 = val & 0xff;
+	if (phy->param_ovrd0)
+		writel_relaxed(phy->param_ovrd0, phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0);
+	usleep_range(1, 2);
+	pr_info("%s():set x0 by adb :0x%x\n", __func__,
+		(readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0) & 0xff));
+
+	return count;
+}
+static DEVICE_ATTR_RW(x0);
+
+static ssize_t x1_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+
+	return sprintf(buf, "0x%x\n", (readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1) & 0xff));
+}
+static ssize_t x1_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+	u32 val;
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+	sscanf(buf, "%x", &val);
+	phy->param_ovrd1 = val & 0xff;
+	if (phy->param_ovrd1)
+		writel_relaxed(phy->param_ovrd1, phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1);
+	usleep_range(1, 2);
+	pr_info("%s():set x1 by adb :0x%x\n", __func__,
+		(readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1) & 0xff));
+
+	return count;
+}
+static DEVICE_ATTR_RW(x1);
+
+static ssize_t x2_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+
+	return sprintf(buf, "0x%x\n", (readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2) & 0xff));
+}
+static ssize_t x2_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+	u32 val;
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+	sscanf(buf, "%x", &val);
+	phy->param_ovrd2 = val & 0xff;
+	if (phy->param_ovrd2)
+		writel_relaxed(phy->param_ovrd2, phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2);
+	usleep_range(1, 2);
+	pr_info("%s():set x2 by adb :0x%x\n", __func__,
+		(readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2) & 0xff));
+
+	return count;
+}
+static DEVICE_ATTR_RW(x2);
+
+static ssize_t x3_show(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+
+	return sprintf(buf, "0x%x\n", (readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3) & 0xff));
+}
+static ssize_t x3_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct msm_hsphy *phy = dev_get_drvdata(dev);
+	u32 val;
+
+	if (!phy) {
+		pr_err("phy is NULL\n");
+		return -ENODEV;
+	}
+	sscanf(buf, "%x", &val);
+	phy->param_ovrd3 = val & 0xff;
+	if (phy->param_ovrd3)
+		writel_relaxed(phy->param_ovrd3, phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3);
+	usleep_range(1, 2);
+	pr_info("%s():set x3 by adb :0x%x\n", __func__,
+		(readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X3) & 0xff));
+
+	return count;
+}
+static DEVICE_ATTR_RW(x3);
+
+static struct attribute *hsphy_attrs[] = {
+	&dev_attr_x0.attr,
+	&dev_attr_x1.attr,
+	&dev_attr_x2.attr,
+	&dev_attr_x3.attr,
+	NULL,
+};
+
+static struct attribute_group hsphy_attr_grp = {
+	.attrs = hsphy_attrs,
+};
+#endif
 
 static void msm_hsphy_enable_clocks(struct msm_hsphy *phy, bool on)
 {
@@ -415,6 +575,12 @@ static int msm_hsphy_init(struct usb_phy *uphy)
 				VBUSVLDEXT0, VBUSVLDEXT0);
 
 	/* set parameter ovrride  if needed */
+#if IS_ENABLED(CONFIG_USB_NOTIFIER)
+	if (phy->param_host_override_seq && (phy->phy.flags & PHY_HOST_MODE))
+		hsusb_phy_write_seq(phy->base, phy->param_host_override_seq,
+				phy->param_host_override_seq_cnt, 0);
+	else
+#endif
 	if (phy->param_override_seq)
 		hsusb_phy_write_seq(phy->base, phy->param_override_seq,
 				phy->param_override_seq_cnt, 0);
@@ -513,7 +679,15 @@ static int msm_hsphy_set_suspend(struct usb_phy *uphy, int suspend)
 
 suspend:
 	if (suspend) { /* Bus suspend */
-		if (phy->cable_connected) {
+		/*
+		 * The HUB class drivers calls usb_phy_notify_disconnect() upon a device
+		 * disconnect. Consider a scenario where a USB device is disconnected without
+		 * detaching the OTG cable. phy->cable_connected is marked false due to above
+		 * mentioned call path. Now, while entering low power mode (host bus suspend),
+		 * we come here and turn off regulators thinking no cable is connected. Prevent
+		 * this by not turning off regulators while in host mode.
+		 */
+		if (phy->cable_connected || (phy->phy.flags & PHY_HOST_MODE)) {
 			/* Enable auto-resume functionality during host mode
 			 * bus suspend with some FS/HS peripheral connected.
 			 */
@@ -871,6 +1045,35 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 		}
 	}
 
+#if IS_ENABLED(CONFIG_USB_NOTIFIER)
+	phy->param_host_override_seq_cnt = of_property_count_elems_of_size(
+					dev->of_node,
+					"qcom,param-host-override-seq",
+					sizeof(*phy->param_host_override_seq));
+	if (phy->param_host_override_seq_cnt > 0) {
+		phy->param_host_override_seq = devm_kcalloc(dev,
+					phy->param_host_override_seq_cnt,
+					sizeof(*phy->param_host_override_seq),
+					GFP_KERNEL);
+		if (!phy->param_host_override_seq)
+			return -ENOMEM;
+
+		if (phy->param_host_override_seq_cnt % 2) {
+			dev_err(dev, "invalid param_host_override_seq_len\n");
+			return -EINVAL;
+		}
+
+		ret = of_property_read_u32_array(dev->of_node,
+				"qcom,param-host-override-seq",
+				phy->param_host_override_seq,
+				phy->param_host_override_seq_cnt);
+		if (ret) {
+			dev_err(dev, "qcom,param-host-override-seq read failed %d\n",
+				ret);
+			return ret;
+		}
+	}
+#endif
 	ret = of_property_read_u32_array(dev->of_node, "qcom,vdd-voltage-level",
 					 (u32 *) phy->vdd_levels,
 					 ARRAY_SIZE(phy->vdd_levels));
@@ -924,6 +1127,14 @@ static int msm_hsphy_probe(struct platform_device *pdev)
 	INIT_WORK(&phy->vbus_draw_work, msm_hsphy_vbus_draw_work);
 	msm_hsphy_create_debugfs(phy);
 
+#if IS_ENABLED(CONFIG_USB_PHY_TUNING_QCOM)
+	phy->hsphy_tune_init_done = true;
+	ret = sysfs_create_group(&pdev->dev.kobj, &hsphy_attr_grp);
+	if (ret) {
+		phy->hsphy_tune_init_done = false;
+		pr_err("%s: hsphy sysfs fail, ret %d", __func__, ret);
+	}
+#endif
 	/*
 	 * EUD may be enable in boot loader and to keep EUD session alive across
 	 * kernel boot till USB phy driver is initialized based on cable status,
@@ -954,6 +1165,11 @@ static int msm_hsphy_remove(struct platform_device *pdev)
 
 	msm_hsphy_enable_clocks(phy, false);
 	msm_hsphy_enable_power(phy, false);
+
+#if IS_ENABLED(CONFIG_USB_PHY_TUNING_QCOM)
+	if (phy->hsphy_tune_init_done)
+		sysfs_remove_group(&pdev->dev.kobj, &hsphy_attr_grp);
+#endif
 	return 0;
 }
 

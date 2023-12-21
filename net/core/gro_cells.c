@@ -15,6 +15,20 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 	struct gro_cell *cell;
 	int res;
 
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	rcu_read_lock();
 	if (unlikely(!(dev->flags & IFF_UP)))
 		goto drop;

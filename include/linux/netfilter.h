@@ -136,11 +136,15 @@ static inline struct nf_hook_ops **nf_hook_entries_get_hook_ops(const struct nf_
 	return (struct nf_hook_ops **)hook_end;
 }
 
+void nf_hook_entry_hookfn_log(const struct nf_hook_entry *entry, struct sk_buff *skb);
+
 static inline int
 nf_hook_entry_hookfn(const struct nf_hook_entry *entry, struct sk_buff *skb,
 		     struct nf_hook_state *state)
 {
-	return entry->hook(entry->priv, skb, state);
+	unsigned int rc = entry->hook(entry->priv, skb, state);
+	nf_hook_entry_hookfn_log(entry, skb);
+	return rc;
 }
 
 static inline void nf_hook_state_init(struct nf_hook_state *p,

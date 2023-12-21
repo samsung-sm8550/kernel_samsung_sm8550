@@ -158,7 +158,7 @@ int arm_smmu_power_on(struct arm_smmu_power_resources *pwr)
 		if (ret)
 			goto out_disable_clocks;
 	}
-
+	
 	pwr->power_count = 1;
 	mutex_unlock(&pwr->power_lock);
 	return 0;
@@ -202,6 +202,7 @@ void arm_smmu_power_off(struct arm_smmu_device *smmu,
 	regulator_bulk_disable(pwr->num_gdscs, pwr->gdscs);
 	arm_smmu_lower_interconnect_bw(pwr);
 	pwr->power_count = 0;
+
 	mutex_unlock(&pwr->power_lock);
 }
 

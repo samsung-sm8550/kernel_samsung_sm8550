@@ -1214,6 +1214,8 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 				 phys_addr_t dest, size_t dest_sz)
 {
 	int ret;
+	int retry_count = 0;
+
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_MP,
 		.cmd = QCOM_SCM_MP_ASSIGN,
@@ -1231,7 +1233,12 @@ static int __qcom_scm_assign_mem(struct device *dev, phys_addr_t mem_region,
 	};
 	struct qcom_scm_res res;
 
-	ret = qcom_scm_call(dev, &desc, &res);
+	do {
+		ret = qcom_scm_call(dev, &desc, &res);
+
+		if (retry_count >= 3)
+			pr_warn("retry_count %d\n", retry_count);
+	} while ((ret == -EBUSY) && (retry_count++ < 4));
 
 	return ret ? : res.result[0];
 }

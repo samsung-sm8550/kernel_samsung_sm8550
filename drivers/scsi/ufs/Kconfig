@@ -228,3 +228,33 @@ config SCSI_UFS_HWMON
 	  a hardware monitoring device will be created for the UFS device.
 
 	  If unsure, say N.
+
+config SEC_UFS_FEATURE
+	bool "SEC specific UFS feature"
+	default n
+	depends on SCSI_UFSHCD
+	help
+	 Enable Samsung feature support
+	 Enabling this allows kernel to use SEC specific feature
+	 defined and implemented by SEC.
+
+config SEC_UFS_CMD_LOGGING
+	bool "Samsung UFS CMD logging feature"
+	default n
+	depends on SEC_UFS_FEATURE
+	help
+	 This selects support for command logging.
+	 Select this option if this feature is needed on working.
+
+	 If unsure, say N.
+
+config SCSI_UFS_TEST_MODE
+	bool "Samsung UFS TEST feature"
+	default n
+	depends on SEC_UFS_FEATURE
+	help
+	 This selects support for test mode for debugging.
+	 Select this option if this feature is needed on working.
+
+	 If unsure, say N.
+

@@ -3918,6 +3918,43 @@ TRACE_EVENT(rdev_del_link_station,
 		  __entry->link_id)
 );
 
+TRACE_EVENT(rdev_get_link_tid_map_status,
+	TP_PROTO(struct wiphy *wiphy, struct net_device *netdev,
+		 struct cfg80211_mlo_tid_map *map),
+	TP_ARGS(wiphy, netdev, map),
+	TP_STRUCT__entry(
+		WIPHY_ENTRY
+		NETDEV_ENTRY
+		__field(bool, default_map)
+		__array(u8, t2lmap, sizeof(struct tid_link_map))
+	),
+	TP_fast_assign(
+		WIPHY_ASSIGN;
+		NETDEV_ASSIGN;
+		__entry->default_map = map->default_map;
+		memcpy(__entry->t2lmap, &map->t2lmap, sizeof(map->t2lmap));
+	),
+	TP_printk(WIPHY_PR_FMT ", " NETDEV_PR_FMT "default_map: %d ",
+		  WIPHY_PR_ARG, NETDEV_PR_ARG, __entry->default_map)
+);
+
+TRACE_EVENT(cfg80211_tid_to_link_map_change,
+	TP_PROTO(struct net_device *netdev,
+		 struct cfg80211_mlo_tid_map *map),
+	TP_ARGS(netdev, map),
+	TP_STRUCT__entry(
+		NETDEV_ENTRY
+		__field(bool, default_map)
+		__array(u8, t2lmap, sizeof(struct tid_link_map))
+	),
+	TP_fast_assign(
+		NETDEV_ASSIGN;
+		__entry->default_map = map->default_map;
+		memcpy(__entry->t2lmap, &map->t2lmap, sizeof(map->t2lmap));
+	),
+	TP_printk(NETDEV_PR_FMT ", default_map: %d ",
+		  NETDEV_PR_ARG, __entry->default_map)
+);
 #endif /* !__RDEV_OPS_TRACE || TRACE_HEADER_MULTI_READ */
 
 #undef TRACE_INCLUDE_PATH

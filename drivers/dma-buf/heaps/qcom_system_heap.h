@@ -13,6 +13,7 @@
 struct qcom_system_heap {
 	int uncached;
 	struct dynamic_page_pool **pool_list;
+	atomic_long_t total_bytes;
 };
 
 #ifdef CONFIG_QCOM_DMABUF_HEAPS_SYSTEM

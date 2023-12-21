@@ -1298,6 +1298,11 @@
  * @NL80211_CMD_MODIFY_LINK_STA: Modify a link of an MLD station
  * @NL80211_CMD_REMOVE_LINK_STA: Remove a link of an MLD station
  *
+ * @NL80211_CMD_TID_TO_LINK_MAP: This is used as a command to fetch the
+ * current TID to link map information affiliated with the MLD.
+ * %NL80211_ATTR_MLO_TID_LINK_DEFAULT_MAP and
+ * %NL80211_ATTR_MLO_TID_LINK_MAP is used with this command.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1554,6 +1559,8 @@ enum nl80211_commands {
 	NL80211_CMD_RESERVED_DO_NOT_USE_8 = 155,
 	NL80211_CMD_RESERVED_DO_NOT_USE_9 = 156,
 	NL80211_CMD_RESERVED_DO_NOT_USE_10 = 157,
+
+	NL80211_CMD_TID_TO_LINK_MAP,
 
 	/* add new commands above here */
 
@@ -2780,6 +2787,16 @@ enum nl80211_commands {
  *	indicates that the sub-channel is punctured. Higher 16 bits are
  *	reserved.
  *
+ * @NL80211_ATTR_MLO_TID_LINK_DEFAULT_MAP: flag attribute, indicating if the
+ *	TID to link mapping is default or not.
+ *	See P802.11be_D3.0 specifications 35.3.7.1.2 Default mapping mode
+ *	section for default mapping definition.
+ *
+ * @NL80211_ATTR_MLO_TID_LINK_MAP: A nested array of TID to links mapping.
+ *	This will have TID to link mapping for TID0 to TID7, each containing
+ *	the uplink and downlink map information.
+ *	See &enum nl80211_mlo_tid_link_map.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3324,6 +3341,9 @@ enum nl80211_attrs {
 	NL80211_ATTR_RESERVED_DO_NOT_USE_23 = 334,
 	NL80211_ATTR_RESERVED_DO_NOT_USE_24 = 335,
 	NL80211_ATTR_RESERVED_DO_NOT_USE_25 = 336,
+
+	NL80211_ATTR_MLO_TID_LINK_DEFAULT_MAP,
+	NL80211_ATTR_MLO_TID_LINK_MAP,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -6380,6 +6400,9 @@ enum nl80211_feature_flags {
  * @NL80211_EXT_FEATURE_SECURE_NAN: Device supports NAN Pairing which enables
  *	authentication, data encryption and message integrity.
  *
+ * @NL80211_EXT_FEATURE_AUTH_TX_RANDOM_TA: Device supports randomized TA
+ *	for authentication frames in @NL80211_CMD_FRAME.
+ *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
  */
@@ -6450,6 +6473,9 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_POWERED_ADDR_CHANGE,
 	NL80211_EXT_FEATURE_PUNCT,
 	NL80211_EXT_FEATURE_SECURE_NAN,
+	NL80211_EXT_FEATURE_AUTH_TX_RANDOM_TA,
+	NL80211_EXT_FEATURE_RESERVED_DO_NOT_USE_2 = 63,
+	NL80211_EXT_FEATURE_RESERVED_DO_NOT_USE_3 = 64,
 	NL80211_EXT_FEATURE_RESERVED_DO_NOT_USE_4 = 65,
 	NL80211_EXT_FEATURE_RESERVED_DO_NOT_USE_5 = 66,
 	NL80211_EXT_FEATURE_RESERVED_DO_NOT_USE_6 = 67,
@@ -7821,4 +7847,26 @@ enum nl80211_ap_settings_flags {
 	NL80211_AP_SETTINGS_SA_QUERY_OFFLOAD_SUPPORT	= 1 << 1,
 };
 
+/**
+ * enum nl80211_mlo_tid_link_map - MLO TID to link mapping.
+ *
+ * @NL80211_ATTR_MLO_TID_LINK_MAP_UPLINK:(u16) Uplink mapping bitmap of TID.
+ *	It is bitmask of link IDs in which a bit set would mean that the TID
+ *	is mapped with the link ID in uplink direction. Otherwise, the TID is
+ *	not mapped the link ID is not in uplink direction.
+ * @NL80211_ATTR_MLO_TID_LINK_MAP_DOWNLINK: (u16) Downlink mapping bitmap of
+ * 	TID. It is bitmask of link IDs in which a bit set would mean that the
+ *	TID is mapped with the link ID in downlink direction. Otherwise, the TID
+ *	is not mapped the link ID is not in downlink direction.
+ */
+enum nl80211_mlo_tid_link_map {
+	__NL80211_ATTR_MLO_TID_LINK_MAP_INVALID,
+	NL80211_ATTR_MLO_TID_LINK_MAP_UPLINK,
+	NL80211_ATTR_MLO_TID_LINK_MAP_DOWNLINK,
+
+	/* keep last */
+	__NL80211_ATTR_MLO_TID_LINK_MAP_AFTER_LAST,
+	NL80211_ATTR_MLO_TID_LINK_MAP_MAX =
+				 __NL80211_ATTR_MLO_TID_LINK_MAP_AFTER_LAST - 1
+};
 #endif /* __LINUX_NL80211_H */

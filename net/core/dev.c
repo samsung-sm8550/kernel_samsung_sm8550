@@ -164,6 +164,7 @@ static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
 static struct list_head offload_base __read_mostly;
+static u64 debug_frags_read;
 
 static int netif_rx_internal(struct sk_buff *skb);
 static int call_netdevice_notifiers_info(unsigned long val,
@@ -4951,6 +4952,21 @@ int netif_rx(struct sk_buff *skb)
 {
 	int ret;
 
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	trace_netif_rx_entry(skb);
 
 	ret = netif_rx_internal(skb);
@@ -4963,6 +4979,21 @@ EXPORT_SYMBOL(netif_rx);
 int netif_rx_ni(struct sk_buff *skb)
 {
 	int err;
+
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
 
 	trace_netif_rx_ni_entry(skb);
 
@@ -5323,6 +5354,23 @@ skip_taps:
 
 		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev,
 					 &another);
+		if (skb) {
+			struct sk_buff *frag_iter;
+
+			if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+				skb_walk_frags(skb, frag_iter) {
+					debug_frags_read++;
+					if (!skb_headlen(frag_iter) &&
+					(!skb_shinfo(frag_iter)->nr_frags ||
+					skb_shinfo(frag_iter)->frag_list)) {
+						pr_err("%s(): head_skb: 0x%llx\n",
+						__func__, (u64)skb);
+						BUG_ON(1);
+					}
+				}
+			}
+		}
+
 		if (another)
 			goto another_round;
 		if (!skb)
@@ -5330,6 +5378,24 @@ skip_taps:
 
 		if (nf_ingress(skb, &pt_prev, &ret, orig_dev) < 0)
 			goto out;
+
+		{
+			struct sk_buff *frag_iter;
+
+			if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+				skb_walk_frags(skb, frag_iter) {
+					debug_frags_read++;
+					if (!skb_headlen(frag_iter) &&
+					(!skb_shinfo(frag_iter)->nr_frags ||
+					skb_shinfo(frag_iter)->frag_list)) {
+						pr_err("%s(): head_skb: 0x%llx\n",
+						__func__, (u64)skb);
+						BUG_ON(1);
+					}
+				}
+			}
+		}
+
 	}
 #endif
 	skb_reset_redirect(skb);
@@ -5484,6 +5550,23 @@ int netif_receive_skb_core(struct sk_buff *skb)
 {
 	int ret;
 
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+
 	rcu_read_lock();
 	ret = __netif_receive_skb_one_core(skb, false);
 	rcu_read_unlock();
@@ -5557,6 +5640,23 @@ static void __netif_receive_skb_list_core(struct list_head *head, bool pfmemallo
 static int __netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
 
 	if (sk_memalloc_socks() && skb_pfmemalloc(skb)) {
 		unsigned int noreclaim_flag;
@@ -5716,6 +5816,23 @@ static void netif_receive_skb_list_internal(struct list_head *head)
 int netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				debug_frags_read++;
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
 
 	trace_netif_receive_skb_entry(skb);
 
@@ -6222,6 +6339,21 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	gro_result_t ret;
+
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			debug_frags_read++;
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
 
 	skb_mark_napi_id(skb, napi);
 	trace_napi_gro_receive_entry(skb);

@@ -24,6 +24,25 @@
 #include <soc/qcom/soc_sleep_stats.h>
 #include <clocksource/arm_arch_timer.h>
 #include <soc/qcom/boot_stats.h>
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+#include <linux/sec_pm_log.h>
+#endif
+#ifdef CONFIG_SEC_FACTORY
+#include <linux/time.h>
+#include <linux/ktime.h>
+#include <linux/time64.h>
+#include "../../adsp_factory/adsp.h"
+#endif
+#if IS_ENABLED(CONFIG_SEC_PM)
+#include <trace/events/power.h>
+
+#define MAX_BUF_LEN		512
+#define MSM_ARCH_TIMER_FREQ	19200000
+#define GET_SEC(A)		((A) / (MSM_ARCH_TIMER_FREQ))
+#define GET_MSEC(A)		(((A) / (MSM_ARCH_TIMER_FREQ / 1000)) % 1000)
+
+static DEFINE_MUTEX(sleep_stats_mutex);
+#endif /* CONFIG_SEC_PM */
 
 #define STAT_TYPE_ADDR		0x0
 #define COUNT_ADDR		0x4
@@ -112,9 +131,47 @@ struct ddr_stats_g_data {
 };
 
 struct ddr_stats_g_data *ddr_gdata;
+#if IS_ENABLED(CONFIG_SEC_PM)
+#define MAX_SUBSYS_LEN	16
+static int max_subsys_count;
+static int subsys_names[MAX_SUBSYS_LEN];
+#endif
 #endif
 
 static bool ddr_freq_update;
+
+#define DSP_SLEEP_DEBUG_ON
+
+#if defined(DSP_SLEEP_DEBUG_ON)
+#include <linux/samsung/debug/sec_debug.h>
+#include <linux/workqueue.h>
+#include <linux/soc/qcom/cdsp-loader.h>
+
+#define MAX_COUNT 10
+
+#ifdef CONFIG_SEC_FACTORY
+#define MAX_DSP_ENTRY 2
+#else
+#define MAX_DSP_ENTRY 1
+#endif
+
+struct _dsp_entry {
+	char name[4];
+	uint64_t entry_sec;
+	uint64_t entry_msec;
+	uint64_t prev_exit_sec;
+	uint64_t prev_exit_msec;
+	uint64_t error_count;
+	struct timespec64 interval;
+#ifdef CONFIG_SEC_FACTORY
+	u32 prev_count;
+	struct timespec64 sleep_enter_kts;
+#endif
+	int (*ssr)(void);
+} DSP_ENTRY[MAX_DSP_ENTRY];	// 0 : CDSP, 1 : ADSP - adsp is disabled for the time being.
+
+static DECLARE_WORK(dsp_ssr, cdsp_restart);
+#endif
 
 #ifdef CONFIG_MSM_BOOT_TIME_MARKER
 static struct stats_prv_data *gdata;
@@ -504,6 +561,9 @@ static struct dentry *create_debugfs_entries(void __iomem *reg,
 				debugfs_create_file(subsystems[j].name, 0444,
 						    root, &subsystems[j],
 						    &subsystem_sleep_stats_fops);
+#if IS_ENABLED(CONFIG_SEC_PM)
+				subsys_names[max_subsys_count++] = j;
+#endif
 				break;
 			}
 		}
@@ -519,6 +579,265 @@ static struct dentry *create_debugfs_entries(void __iomem *reg,
 
 exit:
 	return root;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+u64 last_accumulated[5];
+static void __iomem *global_reg_base;
+static struct stats_prv_data *global_prv_data;
+struct device_node *global_node;
+
+static void sec_sleep_stats_show(const char *annotation)
+{
+	char buf[MAX_BUF_LEN];
+	char *buf_ptr = buf;
+	unsigned int duration_sec, duration_msec;
+
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	char pm_log_buf[MAX_BUF_LEN];
+	char *pm_log_buf_ptr = pm_log_buf;
+#endif
+
+#if defined(DSP_SLEEP_DEBUG_ON)
+	struct _dsp_entry *dsp_entry = NULL;
+	int is_debug_low = 0;
+	unsigned int debug_level = 0;
+#endif
+
+	char stat_type[sizeof(u32) + 1] = {0};
+	u32 offset, type;
+	int i, n_subsystems;
+	bool is_exit = (!strcmp("exit", annotation)) ? true : false;
+
+	mutex_lock(&sleep_stats_mutex);
+
+	/* sleep_stats */
+	buf_ptr += sprintf(buf_ptr, "PM: %s: ", annotation);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "soc: %s: ", (is_exit ? "ex" : "en"));
+#endif
+	for (i = 0; i < global_prv_data[0].config->num_records; i++) {
+		struct sleep_stats stat;
+		u64 accumulated;
+
+		offset = STAT_TYPE_ADDR + (i * sizeof(struct sleep_stats));
+
+		if (global_prv_data[0].config->appended_stats_avail)
+			offset += i * sizeof(struct appended_stats);
+
+		global_prv_data[i].reg = global_reg_base + offset;
+
+		type = readl_relaxed(global_prv_data[i].reg);
+		memcpy(stat_type, &type, sizeof(u32));
+		strim(stat_type);	// stat_type: sleep_stats name
+
+		stat.count = readl_relaxed(global_prv_data[i].reg + COUNT_ADDR);
+		stat.last_entered_at = readq(global_prv_data[i].reg + LAST_ENTERED_AT_ADDR);
+		stat.last_exited_at = readq(global_prv_data[i].reg + LAST_EXITED_AT_ADDR);
+		stat.accumulated = readq(global_prv_data[i].reg + ACCUMULATED_ADDR);
+		accumulated = stat.accumulated;
+
+		if (stat.last_entered_at > stat.last_exited_at)
+			accumulated += arch_timer_read_counter()
+					- stat.last_entered_at;
+
+		if (is_exit && accumulated == last_accumulated[i])
+			buf_ptr += sprintf(buf_ptr, "*");
+		last_accumulated[i] = accumulated;
+
+		duration_sec = GET_SEC(accumulated);
+		duration_msec = GET_MSEC(accumulated);
+
+		buf_ptr += sprintf(buf_ptr, "%s(%d, %u.%u), ",
+				stat_type,
+				stat.count,
+				duration_sec, duration_msec);
+
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "(%d, %u.%u)",
+					stat.count, duration_sec, (duration_msec / 100));
+#endif
+	}
+	buf_ptr += sprintf(buf_ptr, "\n");
+
+	/* subsystem stats */
+	buf_ptr += sprintf(buf_ptr, "PM: %s: ", annotation);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "/");
+#endif
+	n_subsystems = of_property_count_strings(global_node, "ss-name");
+	if (n_subsystems < 0) {
+		pr_err("%s: n_subsystems is under 0, ret=%d\n", __func__, n_subsystems);
+		mutex_unlock(&sleep_stats_mutex);
+		return;
+	}
+
+#if IS_ENABLED(CONFIG_DEBUG_FS) && IS_ENABLED(CONFIG_QCOM_SMEM)
+	for (i = 0; i < max_subsys_count; i++) {
+		struct subsystem_data *subsystem;
+		struct sleep_stats *stat;
+		u64 accumulated;
+		int idx = subsys_names[i];
+
+		subsystem = &subsystems[idx];
+		stat = qcom_smem_get(subsystem->pid, subsystem->smem_item, NULL);
+		if (IS_ERR(stat)) {
+			pr_err("%s: Failed to get qcom_smem for %s, ret=%d\n", __func__,
+				   subsystems[idx].name, PTR_ERR(stat));
+			continue;
+		}
+
+		accumulated = stat->accumulated;
+
+		if (stat->last_entered_at > stat->last_exited_at)
+			accumulated += arch_timer_read_counter()
+				- stat->last_entered_at;
+
+		duration_sec = GET_SEC(accumulated);
+		duration_msec = GET_MSEC(accumulated);
+
+#if defined(DSP_SLEEP_DEBUG_ON)
+#if 0
+		dsp_entry = (!strcmp(subsystem->name, "cdsp")) ? &DSP_ENTRY[0] :
+					(!strcmp(subsystem->name, "slpi") ? &DSP_ENTRY[1] : NULL);
+#else
+		dsp_entry = (!strcmp(subsystem->name, "cdsp")) ? &DSP_ENTRY[0] : NULL;
+#endif
+		if (dsp_entry != NULL) {
+			if (!is_exit) {
+				// entry
+				dsp_entry->entry_sec = duration_sec;
+				dsp_entry->entry_msec = duration_msec;
+			} else {
+				//exit
+				/* Error detected if exit duration is same as entry */
+				if((duration_sec == dsp_entry->entry_sec &&
+							duration_msec == dsp_entry->entry_msec) &&
+						(duration_sec == dsp_entry->prev_exit_sec &&
+						 duration_msec == dsp_entry->prev_exit_msec)) {
+
+					struct timespec64 curr_kts = ktime_to_timespec64(ktime_get_boottime());
+
+					if (dsp_entry->interval.tv_sec != 0) {
+						time64_t diff_kts = curr_kts.tv_sec - dsp_entry->interval.tv_sec;
+
+						if (diff_kts > 60) { // don't update error count within 1 min
+							dsp_entry->error_count++;
+							printk("entry error cnt : %d\n", dsp_entry->error_count);
+							dsp_entry->interval = ktime_to_timespec64(ktime_get_boottime());
+						}
+					} else { 
+						dsp_entry->interval = ktime_to_timespec64(ktime_get_boottime());
+					}
+
+				} else {
+					dsp_entry->error_count = 0;
+				}
+				dsp_entry->prev_exit_sec = duration_sec;
+				dsp_entry->prev_exit_msec = duration_msec;
+			}
+		}
+#ifdef CONFIG_SEC_FACTORY
+		dsp_entry = (!strcmp(subsystem->name, "adsp")) ? &DSP_ENTRY[1] : NULL;
+		if (dsp_entry != NULL && !sns_check_ignore_crash()) {
+			if (!is_exit) {
+				// entry
+				dsp_entry->sleep_enter_kts =
+					ktime_to_timespec64(ktime_get_boottime());
+				dsp_entry->prev_count = stat->count;
+			} else {
+				//exit
+				struct timespec64 curr_kts =
+					ktime_to_timespec64(ktime_get_boottime());
+				time64_t diff_kts =
+					curr_kts.tv_sec - dsp_entry->sleep_enter_kts.tv_sec;
+				if (diff_kts > 10) {  // sleep more than 10s
+					u32 diff_count = stat->count - dsp_entry->prev_count;
+					int64_t wakeup_rate = 0;
+					// more than about 200 wakeups in a sec.
+					wakeup_rate = diff_count / diff_kts;
+					if (wakeup_rate > 200) {
+						dsp_entry->error_count = MAX_COUNT + 1;
+						pr_err("%s frequent wakeup, %u, %u\n",
+							dsp_entry->name,
+							(u32)diff_kts,
+							(u32)wakeup_rate);
+					}
+				}
+			}
+		}
+#endif
+#endif
+		buf_ptr += sprintf(buf_ptr, "%s(%d, %u.%u), ",
+						   subsystem->name,
+						   stat->count,
+						   duration_sec, duration_msec);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		pm_log_buf_ptr += sprintf(pm_log_buf_ptr, "(%d, %u.%u)",
+					stat->count, duration_sec, (duration_msec / 100));
+#endif
+	}
+#endif	
+
+	buf_ptr--;
+	buf_ptr--;
+	buf_ptr += sprintf(buf_ptr, "\n");
+
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	ss_power_print("%s\n", pm_log_buf);
+#endif
+	mutex_unlock(&sleep_stats_mutex);
+
+	pr_info("%s", buf);
+
+#if defined(DSP_SLEEP_DEBUG_ON)
+	// 0 : CDSP, 1 : ADSP
+	for (i = 0; i < sizeof(DSP_ENTRY) / sizeof(struct _dsp_entry); i++) {
+		dsp_entry = &DSP_ENTRY[i];
+		if(dsp_entry->error_count > MAX_COUNT) {
+			debug_level = sec_debug_level();
+
+			switch (debug_level) {
+				case SEC_DEBUG_LEVEL_LOW:
+					is_debug_low = 1;
+					break;
+				case SEC_DEBUG_LEVEL_MID:
+					is_debug_low = 0;
+					break;
+			}
+
+			if (!is_debug_low) {
+				pr_err("entry error cnt : %d\n", dsp_entry->error_count);
+				pr_err("Intentional crash for %s\n", dsp_entry->name);
+				BUG_ON(1);
+			} else {
+				dsp_entry->error_count = 0;
+				pr_err("reset entry error cnt : %d\n", dsp_entry->error_count);
+				pr_err("Intentional cdsp subsystem restart\n");
+				schedule_work(&dsp_ssr);
+			}
+		}
+	}
+#endif
+}
+
+static void soc_sleep_stats_debug_suspend_trace_probe(void *unused,
+					const char *action, int val, bool start)
+{
+	/*
+		SUSPEND
+		start(1), val(1), action(machine_suspend)
+	*/
+	if (start && val > 0 && !strcmp("machine_suspend", action))
+		sec_sleep_stats_show("entry");
+
+	/*
+		RESUME
+		start(0), val(1), action(machine_suspend)
+	*/
+	if (!start && val > 0 && !strcmp("machine_suspend", action))
+		sec_sleep_stats_show("exit");
 }
 #endif
 
@@ -540,6 +859,16 @@ static int soc_sleep_stats_probe(struct platform_device *pdev)
 	void __iomem *reg;
 #endif
 	u32 offset;
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	/* Register callback for cheking subsystem stats */
+	ret = register_trace_suspend_resume(
+		soc_sleep_stats_debug_suspend_trace_probe, NULL);
+	if (ret) {
+		pr_err("%s: Failed to register suspend trace callback, ret=%d\n",
+			__func__, ret);
+	}
+#endif
 
 	config = device_get_match_data(&pdev->dev);
 	if (!config)
@@ -649,6 +978,19 @@ skip_ddr_stats:
 	gdata = prv_data;
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	global_reg_base = reg_base;
+	global_prv_data = prv_data;
+	global_node = pdev->dev.of_node;
+#endif
+
+#if defined(DSP_SLEEP_DEBUG_ON)
+	strncpy(DSP_ENTRY[0].name, "cdsp", 4);
+#if 0
+	strncpy(DSP_ENTRY[1].name, "adsp", 4);
+#endif
+#endif
+
 	return 0;
 }
 
@@ -660,6 +1002,10 @@ static int soc_sleep_stats_remove(struct platform_device *pdev)
 	debugfs_remove_recursive(root);
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	unregister_trace_suspend_resume(
+		soc_sleep_stats_debug_suspend_trace_probe, NULL);
+#endif
 	return 0;
 }
 
@@ -701,4 +1047,4 @@ module_platform_driver(soc_sleep_stats_driver);
 
 MODULE_DESCRIPTION("Qualcomm Technologies, Inc. (QTI) SoC Sleep Stats driver");
 MODULE_LICENSE("GPL v2");
-MODULE_SOFTDEP("pre: smem");
+MODULE_SOFTDEP("pre: smem  cdsp-loader");

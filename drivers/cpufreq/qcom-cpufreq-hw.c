@@ -18,6 +18,10 @@
 #include <linux/spinlock.h>
 #include <linux/qcom-cpufreq-hw.h>
 #include <linux/topology.h>
+#include <trace/events/power.h>
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+#include <linux/sec_pm_log.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/dcvsh.h>
@@ -80,6 +84,10 @@ struct qcom_cpufreq_data {
 
 	unsigned long dcvsh_freq_limit;
 	struct device_attribute freq_limit_attr;
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	unsigned long lowest_freq;
+	bool limiting;
+#endif
 };
 
 static unsigned long cpu_hw_rate, xo_rate;
@@ -171,6 +179,8 @@ u64 qcom_cpufreq_get_cpu_cycle_counter(int cpu)
 }
 EXPORT_SYMBOL(qcom_cpufreq_get_cpu_cycle_counter);
 
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index);
+
 static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 					unsigned int index)
 {
@@ -178,6 +188,7 @@ static int qcom_cpufreq_hw_target_index(struct cpufreq_policy *policy,
 	const struct qcom_cpufreq_soc_data *soc_data = data->soc_data;
 	unsigned long freq = policy->freq_table[index].frequency;
 
+	__cpufreq_hw_target_index_call_notifier_chain(policy, index);
 	writel_relaxed(index, data->base + soc_data->reg_perf_state);
 
 	if (icc_scaling_enabled)
@@ -384,6 +395,7 @@ static void qcom_lmh_dcvs_notify(struct qcom_cpufreq_data *data)
 	struct device *dev = get_cpu_device(cpu);
 	struct dev_pm_opp *opp;
 	u32 val;
+	char lmh_debug[8] = {0};
 
 	if (!dev)
 		return;
@@ -427,7 +439,23 @@ static void qcom_lmh_dcvs_notify(struct qcom_cpufreq_data *data)
 
 		enable_irq(data->throttle_irq);
 		trace_dcvsh_throttle(cpu, 0);
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+		ss_thermal_print("Fin. lmh cpu%d, lowest %lu, f_lim %lu, dcvsh %lu\n",
+			cpu, data->lowest_freq, throttled_freq, qcom_cpufreq_hw_get(cpu));
+		data->limiting = false;
+		data->lowest_freq = UINT_MAX;
+#endif
 	} else {
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	if (data->limiting == false) {
+		ss_thermal_print("Start lmh cpu%d @%lu\n", cpu, throttled_freq);
+		data->lowest_freq = throttled_freq;
+		data->limiting = true;
+	} else {
+		if (throttled_freq < data->lowest_freq)
+			data->lowest_freq = throttled_freq;
+	}
+#endif
 		/*
 		 * Only apply thermal pressure if throttled_freq is less than
 		 * boost or last_non_boost_freq
@@ -449,6 +477,9 @@ static void qcom_lmh_dcvs_notify(struct qcom_cpufreq_data *data)
 
 	arch_set_thermal_pressure(policy->related_cpus, max_capacity - capacity);
 	data->dcvsh_freq_limit = freq_limit;
+
+	snprintf(lmh_debug, sizeof(lmh_debug), "lmh_%d", cpu);
+	trace_clock_set_rate(lmh_debug, throttled_freq, raw_smp_processor_id());
 
 out:
 	mutex_unlock(&data->throttle_lock);
@@ -800,3 +831,26 @@ module_exit(qcom_cpufreq_hw_exit);
 
 MODULE_DESCRIPTION("QCOM CPUFREQ HW Driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_SMEM)
+static ATOMIC_NOTIFIER_HEAD(target_index_notifier_list);
+
+int qcom_cpufreq_hw_target_index_register_notifier(struct notifier_block *nb)
+{
+	return	atomic_notifier_chain_register(&target_index_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_cpufreq_hw_target_index_register_notifier);
+
+int qcom_cpufreq_hw_target_index_unregister_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&target_index_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_cpufreq_hw_target_index_unregister_notifier);
+
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index)
+{
+	atomic_notifier_call_chain(&target_index_notifier_list, index, policy);
+}
+#else
+static void __cpufreq_hw_target_index_call_notifier_chain(struct cpufreq_policy *policy, unsigned int index) {}
+#endif

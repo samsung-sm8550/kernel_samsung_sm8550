@@ -15,7 +15,8 @@
 #include <linux/gunyah/gh_dbl.h>
 #include <soc/qcom/secure_buffer.h>
 #include "qrtr.h"
-
+#include <linux/ipc_logging.h>
+#define GUNYAH_NR_IPC_LOG_PAGE	12
 #define GUNYAH_MAGIC_KEY	0x24495043 /* "$IPC" */
 #define FIFO_SIZE	0x4000
 #define FIFO_FULL_RESERVE 8
@@ -89,6 +90,7 @@ struct qrtr_gunyah_dev {
 	struct gunyah_pipe tx_pipe;
 	struct gunyah_pipe rx_pipe;
 	wait_queue_head_t tx_avail_notify;
+	void *ipc_log;
 };
 
 static void qrtr_gunyah_read(struct qrtr_gunyah_dev *qdev);
@@ -352,6 +354,8 @@ static int qrtr_gunyah_send(struct qrtr_endpoint *ep, struct sk_buff *skb)
 
 		qrtr_gunyah_kick(qdev);
 	}
+	ipc_log_string(qdev->ipc_log, "[%s][h]0x%x [t]0x%x [l]0x%x\n", __func__,
+		*qdev->tx_pipe.head, *qdev->tx_pipe.tail, skb->len);
 	gunyah_clr_tx_notify(qdev);
 	kfree_skb(skb);
 
@@ -421,12 +425,17 @@ static void qrtr_gunyah_read_frag(struct qrtr_gunyah_dev *qdev)
 
 static void qrtr_gunyah_read(struct qrtr_gunyah_dev *qdev)
 {
+	size_t len;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qdev->dbl_lock, flags);
+
 	wake_up_all(&qdev->tx_avail_notify);
 
-	while (gunyah_rx_avail(&qdev->rx_pipe)) {
+
+	while ((len = gunyah_rx_avail(&qdev->rx_pipe)) != 0) {
+		ipc_log_string(qdev->ipc_log, "[%s][h]0x%x [t]0x%x [l]0x%x\n", __func__,
+			*qdev->rx_pipe.head, *qdev->rx_pipe.tail, len);
 		if (qdev->ring.offset)
 			qrtr_gunyah_read_frag(qdev);
 		else
@@ -601,6 +610,14 @@ static void qrtr_gunyah_fifo_init(struct qrtr_gunyah_dev *qdev)
 	*qdev->tx_pipe.head = 0;
 	*qdev->tx_pipe.read_notify = 0;
 	*qdev->rx_pipe.tail = 0;
+
+	
+	pr_err("[%s] TX head - 0x%x tail - 0x%x data : %x %x %x %x\n", __func__, *qdev->tx_pipe.head, *qdev->tx_pipe.tail,
+		*(unsigned int *)((void *)qdev->tx_pipe.fifo+0x200), *(unsigned int *)((void *)qdev->tx_pipe.fifo + 0x204),
+		*(unsigned int *)((void *)qdev->tx_pipe.fifo+0x208), *(unsigned int *)((void *)qdev->tx_pipe.fifo + 0x20C));
+	pr_err("[%s] RX head - 0x%x tail - 0x%x data : %x %x %x %x\n", __func__, *qdev->rx_pipe.head, *qdev->rx_pipe.tail,
+		*(unsigned int *)((void *)qdev->rx_pipe.fifo+0x200), *(unsigned int *)((void *)qdev->rx_pipe.fifo + 0x204),
+		*(unsigned int *)((void *)qdev->rx_pipe.fifo+0x208), *(unsigned int *)((void *)qdev->rx_pipe.fifo + 0x20C));
 }
 
 static struct device_node *qrtr_gunyah_svm_of_parse(struct qrtr_gunyah_dev *qdev)
@@ -769,6 +786,8 @@ static int qrtr_gunyah_probe(struct platform_device *pdev)
 	if (!qdev->master && gunyah_rx_avail(&qdev->rx_pipe))
 		qrtr_gunyah_read(qdev);
 
+
+	qdev->ipc_log = ipc_log_context_create(GUNYAH_NR_IPC_LOG_PAGE, "gunyah", 0);
 	return 0;
 
 fail_rx_dbl:

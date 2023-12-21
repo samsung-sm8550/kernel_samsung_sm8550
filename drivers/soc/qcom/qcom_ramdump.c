@@ -73,6 +73,12 @@ bool dump_enabled(void)
 }
 EXPORT_SYMBOL(dump_enabled);
 
+void set_dump_enabled(int val)
+{
+	enable_dump_collection = val;
+}
+EXPORT_SYMBOL(set_dump_enabled);
+
 static ssize_t qcom_devcd_readv(char *buffer, loff_t offset, size_t count,
 			   void *data, size_t datalen)
 {

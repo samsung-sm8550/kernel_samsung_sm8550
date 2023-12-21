@@ -1490,7 +1490,6 @@ static ssize_t sink_name_store(struct device *dev,
 			const char *buf, size_t size)
 {
 	u32 hash;
-
 	char sink_name[MAX_SINK_NAME] = "";
 	struct coresight_device *new_sink, *current_sink;
 	struct coresight_device *csdev = to_coresight_device(dev);
@@ -1503,7 +1502,10 @@ static ssize_t sink_name_store(struct device *dev,
 		return size;
 	}
 
-	if (sscanf(buf, "%s", sink_name) != 1)
+	/* NOTE:'19' of "%19s" is equal to 'MAX_SINK_NAME - 1'.
+	 * This 'WIDTH' is required to prevent buffer-overflow errors.
+	 */
+	if (sscanf(buf, "%19s", sink_name) != 1)
 		return -EINVAL;
 
 	hash = hashlen_hash(hashlen_string(NULL, sink_name));

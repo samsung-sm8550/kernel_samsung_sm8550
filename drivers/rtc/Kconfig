@@ -1935,4 +1935,9 @@ config RTC_DRV_WILCO_EC
 	  This can also be built as a module. If so, the module will
 	  be named "rtc_wilco_ec".
 
+config RTC_AUTO_PWRON
+	tristate "RTC Auto Power on PMICs"
+	help
+	  Support for the auto power on alarm on the PMIC.
+
 endif # RTC_CLASS

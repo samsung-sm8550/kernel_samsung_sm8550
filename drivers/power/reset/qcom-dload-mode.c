@@ -86,6 +86,19 @@ static void msm_enable_dump_mode(bool enable)
 		set_download_mode(QCOM_DOWNLOAD_NODUMP);
 }
 
+#if IS_ENABLED(CONFIG_SEC_QC_QCOM_REBOOT_REASON)
+void qcom_set_dload_mode(int on)
+{
+	if (on)
+		set_download_mode(QCOM_DOWNLOAD_FULLDUMP);
+	else
+		set_download_mode(QCOM_DOWNLOAD_NODUMP);
+
+	pr_warn("set_dload_mode <%d> (%pS)\n", on, __builtin_return_address(0));
+}
+EXPORT_SYMBOL(qcom_set_dload_mode);
+#endif
+
 static void set_download_dest(struct qcom_dload *poweroff,
 			      enum qcom_download_dest dest)
 {
@@ -268,6 +281,10 @@ static int qcom_dload_panic(struct notifier_block *this, unsigned long event,
 	struct qcom_dload *poweroff = container_of(this, struct qcom_dload,
 						     panic_nb);
 	poweroff->in_panic = true;
+
+	if (IS_ENABLED(CONFIG_SEC_QC_QCOM_REBOOT_REASON))
+		return NOTIFY_OK;
+
 	if (enable_dump)
 		msm_enable_dump_mode(true);
 	return NOTIFY_OK;
