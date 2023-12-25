@@ -953,6 +953,11 @@ config MEMCG_SWAP
 	depends on MEMCG && SWAP
 	default y
 
+config MEMCG_FORCE_USE_VM_SWAPPINESS
+	bool "Force to use vm_swappiness instead of memcg->swappiness"
+	depends on MEMCG_SWAP
+	default y
+
 config MEMCG_KMEM
 	bool
 	depends on MEMCG && !SLOB
@@ -2421,3 +2426,4 @@ config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
 
 source "init/Kconfig.gki"
+source "init/Kconfig.gki-debug"

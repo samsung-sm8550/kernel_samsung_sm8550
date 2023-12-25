@@ -39,6 +39,8 @@ android/abi_gki_aarch64_sunxi
 android/abi_gki_aarch64_pasa
 android/abi_gki_aarch64_zeku
 android/abi_gki_aarch64_lenovo
+android/abi_gki_aarch64_galaxy_grey
+android/abi_gki_aarch64_galaxy_presubmit
 "
 
 FILES="${FILES}

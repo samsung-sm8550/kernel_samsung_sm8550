@@ -55,6 +55,8 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_stat_iowait);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_stat_blocked);
 #endif
 
+DEFINE_PER_CPU_SHARED_ALIGNED(struct rq_guard, runqueue_guards);
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 EXPORT_SYMBOL_GPL(runqueues);
 
@@ -9686,6 +9688,8 @@ void __init sched_init(void)
 
 		rq->core_cookie = 0UL;
 #endif
+
+		memset(&per_cpu(runqueue_guards, i), 0xFF, sizeof(struct rq_guard));
 	}
 
 	set_load_weight(&init_task, false);

@@ -840,25 +840,6 @@ bool f2fs_cluster_can_merge_page(struct compress_ctx *cc, pgoff_t index)
 	return is_page_in_cluster(cc, index);
 }
 
-bool f2fs_all_cluster_page_loaded(struct compress_ctx *cc, struct pagevec *pvec,
-				int index, int nr_pages)
-{
-	unsigned long pgidx;
-	int i;
-
-	if (nr_pages - index < cc->cluster_size)
-		return false;
-
-	pgidx = pvec->pages[index]->index;
-
-	for (i = 1; i < cc->cluster_size; i++) {
-		if (pvec->pages[index + i]->index != pgidx + i)
-			return false;
-	}
-
-	return true;
-}
-
 static bool cluster_has_invalid_data(struct compress_ctx *cc)
 {
 	loff_t i_size = i_size_read(cc->inode);
@@ -964,10 +945,6 @@ static int __f2fs_cluster_blocks(struct inode *inode,
 					ret++;
 			}
 		}
-
-		f2fs_bug_on(F2FS_I_SB(inode),
-			!compr && ret != cluster_size &&
-			!is_inode_flag_set(inode, FI_COMPRESS_RELEASED));
 	}
 fail:
 	f2fs_put_dnode(&dn);

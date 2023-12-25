@@ -39,6 +39,9 @@
 #include "hub.h"
 #include "otg_productlist.h"
 
+#undef dev_dbg
+#define dev_dbg dev_err
+
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define USB_VENDOR_SMSC				0x0424
 #define USB_PRODUCT_USB5534B			0x5534
@@ -122,6 +125,7 @@ static int usb_reset_and_verify_device(struct usb_device *udev);
 static int hub_port_disable(struct usb_hub *hub, int port1, int set_state);
 static bool hub_port_warm_reset_required(struct usb_hub *hub, int port1,
 		u16 portstatus);
+static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev);
 
 static inline char *portspeed(struct usb_hub *hub, int portstatus)
 {
@@ -968,7 +972,11 @@ static int hub_set_port_link_state(struct usb_hub *hub, int port1,
  */
 static void hub_port_logical_disconnect(struct usb_hub *hub, int port1)
 {
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&hub->ports[port1 - 1]->dev, "logical disconnect\n");
+#else
 	dev_dbg(&hub->ports[port1 - 1]->dev, "logical disconnect\n");
+#endif
 	hub_port_disable(hub, port1, 1);
 
 	/* FIXME let caller ask to power down the port:
@@ -1845,6 +1853,9 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	if (hdev->level == MAX_TOPO_LEVEL) {
 		dev_err(&intf->dev,
 			"Unsupported bus topology: hub nested too deep\n");
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+		send_usb_host_certi_uevent(&intf->dev, USB_HOST_CERTI_HUB_DEPTH_EXCEED);
+#endif
 		return -E2BIG;
 	}
 
@@ -2431,8 +2442,24 @@ static int usb_enumerate_device(struct usb_device *udev)
 		}
 		return -ENOTSUPP;
 	}
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+	if (udev->parent) {
+		struct usb_hub *hub = usb_hub_to_struct_hub(udev->parent);
+
+		if (le16_to_cpu(udev->descriptor.idVendor) == 0x1a0a &&
+			le16_to_cpu(udev->descriptor.idProduct) == 0x0201) {
+			send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_UNSUPPORT_ACCESSORY);
+			return -ENOTSUPP;
+		}
+	}
+#endif
 
 	usb_detect_interface_quirks(udev);
+
+#ifdef CONFIG_USB_INTERFACE_LPM_LIST
+	if (usb_detect_interface_lpm(udev))
+		hub_set_initial_usb2_lpm_policy(udev);
+#endif
 
 	return 0;
 }
@@ -4926,9 +4953,13 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 				goto fail;
 			}
 			if (r) {
-				if (r != -ENODEV)
+				if (r != -ENODEV) {
 					dev_err(&udev->dev, "device descriptor read/64, error %d\n",
 							r);
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+					send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_NO_RESPONSE);
+#endif
+				}
 				retval = -EMSGSIZE;
 				continue;
 			}
@@ -4980,10 +5011,14 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 		retval = usb_get_device_descriptor(udev, 8);
 		if (retval < 8) {
-			if (retval != -ENODEV)
+			if (retval != -ENODEV) {
 				dev_err(&udev->dev,
 					"device descriptor read/8, error %d\n",
 					retval);
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+				send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_NO_RESPONSE);
+#endif
+			}
 			if (retval >= 0)
 				retval = -EMSGSIZE;
 		} else {
@@ -5045,9 +5080,13 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 
 	retval = usb_get_device_descriptor(udev, USB_DT_DEVICE_SIZE);
 	if (retval < (signed)sizeof(udev->descriptor)) {
-		if (retval != -ENODEV)
+		if (retval != -ENODEV) {
 			dev_err(&udev->dev, "device descriptor read/all, error %d\n",
 					retval);
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+			send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_NO_RESPONSE);
+#endif
+		}
 		if (retval >= 0)
 			retval = -ENOMSG;
 		goto fail;
@@ -5067,7 +5106,9 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	/* notify HCD that we have a device connected and addressed */
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
+#ifndef CONFIG_USB_INTERFACE_LPM_LIST
 	hub_set_initial_usb2_lpm_policy(udev);
+#endif
 fail:
 	if (retval) {
 		hub_port_disable(hub, port1, 0);
@@ -5146,6 +5187,9 @@ hub_power_remaining(struct usb_hub *hub)
 	if (remaining < 0) {
 		dev_warn(hub->intfdev, "%dmA over power budget!\n",
 			-remaining);
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+		send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_HUB_POWER_EXCEED);
+#endif
 		remaining = 0;
 	}
 	return remaining;
@@ -5249,6 +5293,12 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 	static int unreliable_port = -1;
 	bool retry_locked;
 
+#ifdef CONFIG_USB_DEBUG_DETAILED_LOG
+	dev_info(&port_dev->dev,
+		"port %d, status %04x, change %04x, %s\n",
+		port1, portstatus, portchange, portspeed(hub, portstatus));
+#endif
+
 	/* Disconnect any existing devices under this port */
 	if (udev) {
 		if (hcd->usb_phy && !hdev->parent)
@@ -5322,6 +5372,9 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 					"couldn't allocate usb_device\n");
 			mutex_unlock(hcd->address0_mutex);
 			usb_unlock_port(port_dev);
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+			send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_HOST_RESOURCE_EXCEED);
+#endif
 			goto done;
 		}
 
@@ -5431,6 +5484,23 @@ static void hub_port_connect(struct usb_hub *hub, int port1, u16 portstatus,
 		if (status)
 			goto loop_disable;
 
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+		if (!udev->actconfig) {
+			int num_configs;
+			int insufficient_power = 1;
+			struct usb_host_config *c;
+
+			c = udev->config;
+			num_configs = udev->descriptor.bNumConfigurations;
+			for (i = 0; i < num_configs; (i++, c++)) {
+				pr_info("%s : max_power(%d): %d\n",  __func__, i, usb_get_max_power(udev, c));
+				if (usb_get_max_power(udev, c) <= udev->bus_mA)
+					insufficient_power = 0;
+			}
+			if (insufficient_power)
+				send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_HUB_POWER_EXCEED);
+		}
+#endif
 		status = hub_power_remaining(hub);
 		if (status)
 			dev_dbg(hub->intfdev, "%dmA power budget left\n", status);
@@ -5692,6 +5762,9 @@ static void port_event(struct usb_hub *hub, int port1)
 	 */
 	if (hub_port_warm_reset_required(hub, port1, portstatus)) {
 		dev_dbg(&port_dev->dev, "do warm reset\n");
+#if IS_ENABLED(CONFIG_USB_HOST_CERTIFICATION)
+		send_usb_host_certi_uevent(hub->intfdev, USB_HOST_CERTI_WARM_RESET);
+#endif
 		if (!udev || !(portstatus & USB_PORT_STAT_CONNECTION)
 				|| udev->state == USB_STATE_NOTATTACHED) {
 			if (hub_port_reset(hub, port1, NULL,
