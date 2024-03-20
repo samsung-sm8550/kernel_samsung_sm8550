@@ -14,6 +14,9 @@
 #include <linux/suspend.h>
 #include <linux/cpumask.h>
 #include <linux/sched/walt.h>
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+#include <linux/sec_pm_log.h>
+#endif
 #include "thermal_zone_internal.h"
 
 enum thermal_pause_levels {
@@ -106,6 +109,9 @@ static int thermal_pause_work(struct thermal_pause_cdev *thermal_pause_cdev)
 
 	cpumask_copy(&cpus_to_pause, &thermal_pause_cdev->cpu_mask);
 	pr_debug("Pause:%*pbl\n", cpumask_pr_args(&thermal_pause_cdev->cpu_mask));
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	ss_thermal_print("Pause:%*pbl\n", cpumask_pr_args(&thermal_pause_cdev->cpu_mask));
+#endif
 
 	mutex_unlock(&cpus_pause_lock);
 	ret = walt_pause_cpus(&cpus_to_pause, PAUSE_THERMAL);
@@ -153,6 +159,9 @@ static int thermal_resume_work(struct thermal_pause_cdev *thermal_pause_cdev)
 
 	cpumask_copy(&cpus_to_unpause, &thermal_pause_cdev->cpu_mask);
 	pr_debug("Unpause:%*pbl\n", cpumask_pr_args(&cpus_to_unpause));
+#if IS_ENABLED(CONFIG_SEC_PM_LOG)
+	ss_thermal_print("Unpause:%*pbl\n", cpumask_pr_args(&thermal_pause_cdev->cpu_mask));
+#endif
 
 	mutex_unlock(&cpus_pause_lock);
 	ret = walt_resume_cpus(&cpus_to_unpause, PAUSE_THERMAL);

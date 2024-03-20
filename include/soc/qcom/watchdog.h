@@ -171,4 +171,16 @@ int qcom_wdt_remove(struct platform_device *pdev);
 static inline void qcom_wdt_trigger_bite(void) { }
 #endif
 
+#if IS_ENABLED(CONFIG_SEC_QC_QCOM_WDT_CORE)
+extern int qcom_wdt_pet_register_notifier(struct notifier_block *nb);
+extern int qcom_wdt_pet_unregister_notifier(struct notifier_block *nb);
+extern int qcom_wdt_bark_register_notifier(struct notifier_block *nb);
+extern int qcom_wdt_bark_unregister_notifier(struct notifier_block *nb);
+#else
+static inline int qcom_wdt_pet_register_notifier(struct notifier_block *nb) { return 0; }
+static inline int qcom_wdt_pet_unregister_notifier(struct notifier_block *nb) { return 0; }
+static inline int qcom_wdt_bark_register_notifier(struct notifier_block *nb) { return 0; }
+static inline int qcom_wdt_bark_unregister_notifier(struct notifier_block *nb) { return 0; }
+#endif
+
 #endif

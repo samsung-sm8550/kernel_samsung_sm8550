@@ -22,6 +22,8 @@
 #include "clk-debug.h"
 #include "gdsc-debug.h"
 
+#include <linux/samsung/debug/sec_debug.h>
+
 static struct clk_hw *measure;
 static bool debug_suspend;
 static bool debug_suspend_atomic;
@@ -869,6 +871,13 @@ static int clock_debug_print_clock(struct hw_debug_clk *dclk, struct seq_file *s
 			clock_debug_output_cont(s, "%s%s [%ld]", start,
 				clk_hw_get_name(clk_hw),
 				clk_rate);
+
+#if 1
+			if (sec_debug_is_enabled()) {
+				if (!strncmp(clk_hw_get_name(clk_hw), "disp_cc_mdss", strlen("disp_cc_mdss")) && (clk_rate > 0))
+					panic("display clock is alive");
+			}
+#endif			
 		}
 
 		if (atomic)
@@ -1078,6 +1087,20 @@ int clk_debug_init(void)
 {
 	static struct dentry *rootdir;
 	int ret = 0;
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	ret = register_trace_suspend_resume(
+		clk_debug_suspend_trace_probe, NULL);
+	if (ret) {
+		pr_err("%s: Failed to register suspend trace callback, ret=%d\n",
+			__func__, ret);
+		return ret;
+	}
+	else {
+		debug_suspend = true;
+		debug_suspend_atomic = true;
+	}
+#endif
 
 	rootdir = debugfs_lookup("clk", NULL);
 	if (IS_ERR_OR_NULL(rootdir)) {

@@ -15,3 +15,4 @@ qcom_dma_heaps-$(CONFIG_QCOM_DMABUF_HEAPS_CARVEOUT) += qcom_carveout_heap.o \
 						       qcom_dma_heap_secure_utils.o
 qcom_dma_heaps-$(CONFIG_QCOM_DMABUF_HEAPS_BITSTREAM_CONTIG) += qcom_bitstream_contig_heap.o
 qcom_dma_heaps-$(CONFIG_QCOM_DMABUF_HEAPS_TUI_CARVEOUT) += qcom_tui_carveout_heap.o
+qcom_dma_heaps-$(CONFIG_RBIN)			+= rbin_heap.o rbincache.o rbinregion.o

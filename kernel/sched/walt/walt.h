@@ -35,6 +35,28 @@
 /* MAX_MARGIN_LEVELS should be one less than MAX_CLUSTERS */
 #define MAX_MARGIN_LEVELS (MAX_CLUSTERS - 1)
 
+struct debug_clock {
+	unsigned int idx;
+	int cpu;
+	int type;
+	u64 rq_clock;
+	u64 sched_clock;
+	u64 ktime;
+	u64 rq_clock_after;
+	u64 window_start;
+	u64 suspend_clock;
+	u64 latest_clock;
+	u64 end;
+	u64 ret;
+	u64 caller0;
+	u64 caller1;
+	u64 caller2;
+	u64 caller3;
+	u32 update_flags;
+	bool lock;
+	bool suspend;
+};
+
 extern bool walt_disabled;
 
 enum task_event {
@@ -183,7 +205,7 @@ extern int sched_boost_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
 extern int sched_busy_hyst_handler(struct ctl_table *table, int write,
 			void __user *buffer, size_t *lenp, loff_t *ppos);
-extern u64 walt_sched_clock(void);
+extern u64 walt_sched_clock(struct rq *rq, bool log);
 extern void walt_init_tg(struct task_group *tg);
 extern void walt_init_topapp_tg(struct task_group *tg);
 extern void walt_init_foreground_tg(struct task_group *tg);
@@ -405,7 +427,7 @@ static inline void waltgov_run_callback(struct rq *rq, unsigned int flags)
 
 	cb = rcu_dereference_sched(*per_cpu_ptr(&waltgov_cb_data, cpu_of(rq)));
 	if (cb)
-		cb->func(cb, walt_sched_clock(), flags);
+		cb->func(cb, walt_sched_clock(NULL, 0), flags);
 }
 
 extern unsigned long cpu_util_freq_walt(int cpu, struct walt_cpu_load *walt_load,
@@ -657,7 +679,7 @@ static inline int per_task_boost(struct task_struct *p)
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 
 	if (wts->boost_period) {
-		if (walt_sched_clock() > wts->boost_expires) {
+		if (walt_sched_clock(NULL, 0) > wts->boost_expires) {
 			wts->boost_period = 0;
 			wts->boost_expires = 0;
 			wts->boost = 0;
@@ -964,8 +986,9 @@ static inline bool walt_flag_test(struct task_struct *p, enum walt_flags feature
 	return !!(wts->flags & (1 << feature));
 }
 
-#define WALT_MVP_SLICE		3000000U
-#define WALT_MVP_LIMIT		(4 * WALT_MVP_SLICE)
+#define WALT_MVP_SLICE		6000000U
+#define WALT_MVP_LIMIT		(2 * WALT_MVP_SLICE)
+#define WALT_MVP_LL_SLICE		30000000U
 
 /* higher number, better priority */
 #define WALT_RTG_MVP		0

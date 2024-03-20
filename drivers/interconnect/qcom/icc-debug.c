@@ -148,6 +148,17 @@ static int __init qcom_icc_debug_init(void)
 	static struct dentry *dir;
 	int ret;
 
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+	ret = register_trace_suspend_resume(icc_debug_suspend_trace_probe, NULL);
+	if (ret) {
+		pr_err("%s: Failed to register suspend trace callback, ret=%d\n",
+			__func__, ret);
+		return ret;
+	}
+	else
+		debug_suspend = true;
+#endif
+
 	dir = debugfs_lookup("interconnect", NULL);
 	if (IS_ERR_OR_NULL(dir)) {
 		ret = PTR_ERR(dir);

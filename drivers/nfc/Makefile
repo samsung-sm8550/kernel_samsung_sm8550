@@ -2,19 +2,62 @@
 #
 # Makefile for nfc devices
 #
+ifneq ($(SEC_BUILD_CONF_USE_ESE_TZ), false)
+	ccflags-y += -DENABLE_ESE_SPI_SECURED
+endif
 
-obj-$(CONFIG_NFC_FDP)		+= fdp/
-obj-$(CONFIG_NFC_PN544)		+= pn544/
-obj-$(CONFIG_NFC_MICROREAD)	+= microread/
-obj-$(CONFIG_NFC_PN533)		+= pn533/
-obj-$(CONFIG_NFC_MEI_PHY)	+= mei_phy.o
-obj-$(CONFIG_NFC_SIM)		+= nfcsim.o
-obj-$(CONFIG_NFC_PORT100)	+= port100.o
-obj-$(CONFIG_NFC_MRVL)		+= nfcmrvl/
-obj-$(CONFIG_NFC_TRF7970A)	+= trf7970a.o
-obj-$(CONFIG_NFC_ST21NFCA)  	+= st21nfca/
-obj-$(CONFIG_NFC_ST_NCI)	+= st-nci/
-obj-$(CONFIG_NFC_NXP_NCI)	+= nxp-nci/
-obj-$(CONFIG_NFC_S3FWRN5)	+= s3fwrn5/
-obj-$(CONFIG_NFC_ST95HF)	+= st95hf/
-obj-$(CONFIG_NFC_VIRTUAL_NCI)	+= virtual_ncidev.o
+# for combined driver
+ifeq ($(CONFIG_NFC_NXP_COMBINED),y)
+ifeq ($(CONFIG_SAMSUNG_NFC),m)
+obj-$(CONFIG_SAMSUNG_NFC)		+= nfc_nxp_sec.o
+nfc_nxp_sec-$(CONFIG_NFC_SN2XX_ESE_SUPPORT)	+= p73.o ese_reset.o
+nfc_nxp_sec-$(CONFIG_SEC_NFC_LOGGER)		+= ../nfc_logger/nfc_logger.o
+nfc_nxp_sec-$(CONFIG_NFC_SN2XX)		+= common.o common_ese.o i2c_drv.o
+else
+obj-$(CONFIG_NFC_SN2XX)	+= nfc.o
+nfc-objs			+= common.o common_ese.o i2c_drv.o
+obj-$(CONFIG_NFC_SN2XX_ESE_SUPPORT)	+= p73.o ese_reset.o
+obj-$(CONFIG_SEC_NFC_LOGGER)	+= ../nfc_logger/nfc_logger.o
+endif # CONFIG_SAMSUNG_NFC
+
+else # !CONFIG_NFC_NXP_COMBINED
+# for sn2xx only
+ifeq ($(CONFIG_SAMSUNG_NFC),m)
+obj-$(CONFIG_SAMSUNG_NFC)		+= nfc_sec.o
+nfc_sec-$(CONFIG_NFC_SN2XX_ESE_SUPPORT)	+= p73.o ese_reset.o
+nfc_sec-$(CONFIG_SEC_NFC_LOGGER)		+= nfc_logger/nfc_logger.o
+nfc_sec-$(CONFIG_NFC_SN2XX)		+= common.o common_ese.o i2c_drv.o
+else
+obj-$(CONFIG_NFC_SN2XX)	+= nfc.o
+nfc-objs			+= common.o common_ese.o i2c_drv.o
+obj-$(CONFIG_NFC_SN2XX_ESE_SUPPORT)	+= p73.o ese_reset.o
+obj-$(CONFIG_SEC_NFC_LOGGER)	+= nfc_logger/nfc_logger.o
+endif # CONFIG_SAMSUNG_NFC
+
+
+ifeq ($(CONFIG_SEC_STAR), m)
+obj-$(CONFIG_SEC_STAR) = sec-star/sec_star.o
+
+sec_star-y += \
+                        sec-star/sec_star.o \
+                        sec-star/protocol/ese_data.o \
+                        sec-star/protocol/ese_iso7816_t1.o \
+                        sec-star/hal/ese_i2c.o \
+                        sec-star/hal/ese_spi.o \
+                        sec-star/hal/ese_hal.o
+
+sec_star-$(CONFIG_STAR_K250A) += sec-star/sec_k250a.o
+else
+obj-$(CONFIG_SEC_STAR) += sec-star/sec_star.o \
+                        sec-star/protocol/ese_data.o \
+                        sec-star/protocol/ese_memory.o \
+                        sec-star/protocol/ese_iso7816_t1.o \
+                        sec-star/hal/ese_i2c.o \
+                        sec-star/hal/ese_spi.o \
+                        sec-star/hal/ese_hal.o
+
+obj-$(CONFIG_STAR_K250A) += sec-star/sec_k250a.o
+endif # CONFIG_SEC_STAR
+endif # CONFIG_NFC_NXP_COMBINED
+
+ccflags-y 			+= -DRECOVERY_ENABLE -UDEBUG

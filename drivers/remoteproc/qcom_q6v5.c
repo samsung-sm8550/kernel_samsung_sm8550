@@ -6,6 +6,7 @@
  * Copyright (C) 2014 Sony Mobile Communications AB
  * Copyright (c) 2012-2013, 2020-2021, The Linux Foundation. All rights reserved.
  */
+
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
@@ -17,6 +18,14 @@
 #include "qcom_common.h"
 #include "qcom_q6v5.h"
 #include <trace/events/rproc_qcom.h>
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#include <linux/adsp/ssc_ssr_reason.h>
+#endif
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+#include <sound/samsung/sec_audio_sysfs.h>
+#include <sound/samsung/snd_debug_proc.h>
+#include <soc/qcom/adsp_sleepmon.h>
+#endif
 
 #define Q6V5_PANIC_DELAY_MS	200
 
@@ -67,6 +76,11 @@ static void qcom_q6v5_crash_handler_work(struct work_struct *work)
 	struct rproc_subdev *subdev;
 	int votes;
 
+	if (atomic_read(&q6v5->ssr_in_prog) != 0) {
+		dev_err(q6v5->dev, "skip crash handling\n");
+		return;
+	}
+
 	mutex_lock(&rproc->lock);
 
 	rproc->state = RPROC_CRASHED;
@@ -98,6 +112,9 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC) || IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	char *chk_name = NULL;
+#endif
 
 	/* Sometimes the stop triggers a watchdog rather than a stop-ack */
 	if (!q6v5->running) {
@@ -107,10 +124,25 @@ static irqreturn_t q6v5_wdog_interrupt(int irq, void *data)
 	}
 
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
-	if (!IS_ERR(msg) && len > 0 && msg[0])
+	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "watchdog received: %s\n", msg);
-	else
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL)
+			ssr_reason_call_back(msg, len);
+#endif
+	} else
 		dev_err(q6v5->dev, "watchdog without message\n");
+
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	chk_name = strchr(q6v5->rproc->name, '-');
+	if (chk_name != NULL)
+		if (!strncmp(chk_name, "-adsp", 5)) {
+			sdp_info_print("watchdog received: %s, is_aud = %d\n",
+				msg, check_is_audio_active());
+			send_adsp_silent_reset_ev();
+		}
+#endif
 
 	q6v5->running = false;
 	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_wdog", msg);
@@ -136,6 +168,9 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	struct qcom_q6v5 *q6v5 = data;
 	size_t len;
 	char *msg;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC) || IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	char *chk_name = NULL;
+#endif
 
 	if (!q6v5->running) {
 		dev_info(q6v5->dev, "received fatal irq while q6 is offline\n");
@@ -143,10 +178,37 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	}
 
 	msg = qcom_smem_get(QCOM_SMEM_HOST_ANY, q6v5->crash_reason, &len);
-	if (!IS_ERR(msg) && len > 0 && msg[0])
+	if (!IS_ERR(msg) && len > 0 && msg[0]) {
 		dev_err(q6v5->dev, "fatal error received: %s\n", msg);
-	else
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		chk_name = strstr(q6v5->rproc->name, "adsp");
+		if (chk_name != NULL) {
+			ssr_reason_call_back(msg, len);
+			if (strstr(msg, "IPLSREVOCER")) {
+				q6v5->rproc->fssr = true;
+				q6v5->rproc->prev_recovery_disabled = 
+					q6v5->rproc->recovery_disabled;
+				q6v5->rproc->recovery_disabled = false;
+			} else {
+				q6v5->rproc->fssr = false;			
+			}
+			dev_info(q6v5->dev, "recovery:%d,%d\n",
+				(int)q6v5->rproc->prev_recovery_disabled,
+				(int)q6v5->rproc->recovery_disabled);			
+		}
+#endif
+	} else
 		dev_err(q6v5->dev, "fatal error without message\n");
+
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+	chk_name = strchr(q6v5->rproc->name, '-');
+	if (chk_name != NULL)
+		if (!strncmp(chk_name, "-adsp", 5)) {
+			sdp_info_print("fatal error received: %s, is_aud = %d\n",
+				msg, check_is_audio_active());
+			send_adsp_silent_reset_ev();
+		}
+#endif
 
 	q6v5->running = false;
 	trace_rproc_qcom_event(dev_name(q6v5->dev), "q6v5_fatal", msg);
@@ -156,6 +218,16 @@ static irqreturn_t q6v5_fatal_interrupt(int irq, void *data)
 	if (q6v5->rproc->recovery_disabled) {
 		schedule_work(&q6v5->crash_handler);
 	} else {
+		int silent_ssr_in_progress;
+
+		spin_lock(&q6v5->silent_ssr_lock);
+		silent_ssr_in_progress = atomic_read(&q6v5->ssr_in_prog);
+		spin_unlock(&q6v5->silent_ssr_lock);
+
+		if (silent_ssr_in_progress) {
+			pr_err("[%s] silent ssr is ongoing. Return\n");
+			return IRQ_HANDLED;
+		}
 		if (q6v5->ssr_subdev)
 			qcom_notify_early_ssr_clients(q6v5->ssr_subdev);
 
@@ -287,6 +359,8 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 	q6v5->handover = handover;
 	q6v5->ssr_subdev = NULL;
 
+	atomic_set(&q6v5->ssr_in_prog, 0);
+
 	init_completion(&q6v5->start_done);
 	init_completion(&q6v5->stop_done);
 
@@ -373,6 +447,7 @@ int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
 
 	INIT_WORK(&q6v5->crash_handler, qcom_q6v5_crash_handler_work);
 
+	spin_lock_init(&q6v5->silent_ssr_lock);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(qcom_q6v5_init);

@@ -23,6 +23,21 @@
 #include "tsens.h"
 #include "thermal_zone_internal.h"
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+#define MAX_TSENS0_TS	16
+
+static struct delayed_work ts_print_work;
+struct tsens_priv *ts_priv0;
+struct tsens_priv *ts_priv1;
+struct tsens_priv *ts_priv2;
+
+/* TODO: optimize the # of tsens pring, now for bring up  debugging */
+static int ts_print_num0[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static int ts_print_num1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static int ts_print_num2[] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+static int ts_print_count;
+#endif
+
 /**
  * struct tsens_irq_data - IRQ status and temperature violations
  * @up_viol:        upper threshold violated
@@ -999,6 +1014,51 @@ static int tsens_tz_change_mode(void *data, enum thermal_device_mode mode)
 	return qti_tz_change_mode(s->tzd, mode);
 }
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+static void __ref ts_print(struct work_struct *work)
+{
+	struct tsens_sensor *ts_sensor;
+	int temp = 0;
+	size_t i;
+	int added = 0, ret = 0;
+	char buffer[500] = { 0, };
+
+	ret = snprintf(buffer + added, sizeof(buffer) - added, "tsens");
+	added += ret;
+
+	/* print tsens0 */
+	for (i = 0; i < (sizeof(ts_print_num0) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv0->sensor[ts_print_num0[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+				   "[%d:%d]", ts_print_num0[i], temp / 100);
+		added += ret;
+	}
+
+	/* print tsens1 */
+	for (i = 0; i < (sizeof(ts_print_num1) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv1->sensor[ts_print_num1[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num1[i] + MAX_TSENS0_TS, temp / 100);
+		added += ret;
+	}
+
+	/* print tsens2 */
+	for (i = 0; i < (sizeof(ts_print_num2) / sizeof(int)); i++) {
+		ts_sensor = &ts_priv2->sensor[ts_print_num2[i]];
+		tsens_get_temp(ts_sensor, &temp);
+		ret = snprintf(buffer + added, sizeof(buffer) - added,
+					   "[%d:%d]", ts_print_num1[i] + MAX_TSENS0_TS + MAX_TSENS0_TS, temp / 100);
+		added += ret;
+	}
+
+	pr_info("%s: %s\n", __func__, buffer);
+
+	schedule_delayed_work(&ts_print_work, HZ * 5);
+}
+#endif
+
 static int  __maybe_unused tsens_suspend(struct device *dev)
 {
 	struct tsens_priv *priv = dev_get_drvdata(dev);
@@ -1229,12 +1289,40 @@ static int tsens_probe(struct platform_device *pdev)
 
 	priv->tsens_md = thermal_minidump_register(np->name);
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+	ret = tsens_register(priv);
+
+	if (!strncmp(pdev->name, "c271000", 7)) {
+		pr_info("%s: ts_priv0\n", __func__);
+		ts_priv0 = priv;
+	} else if (!strncmp(pdev->name, "c272000", 7)) {
+		pr_info("%s: ts_priv1\n", __func__);
+		ts_priv1 = priv;
+	} else if (!strncmp(pdev->name, "c273000", 7)) {
+		pr_info("%s: ts_priv2\n", __func__);
+		ts_priv2 = priv;
+	}
+
+	if (ts_print_count == 0 && ts_priv2 != NULL) {
+		pr_info("%s: set schedule work\n", __func__);
+		INIT_DELAYED_WORK(&ts_print_work, ts_print);
+		schedule_delayed_work(&ts_print_work, 0);
+		ts_print_count++;
+	}
+
+	return ret;
+#else
 	return tsens_register(priv);
+#endif
 }
 
 static int tsens_remove(struct platform_device *pdev)
 {
 	struct tsens_priv *priv = platform_get_drvdata(pdev);
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	cancel_delayed_work_sync(&ts_print_work);
+#endif
 
 	debugfs_remove_recursive(priv->debug_root);
 	tsens_disable_irq(priv);

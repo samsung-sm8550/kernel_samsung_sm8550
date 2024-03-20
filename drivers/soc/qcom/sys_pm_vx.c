@@ -184,7 +184,7 @@ static void sys_pm_vx_send_msg(struct vx_platform_data *pd, bool enable)
 	mutex_lock(&pd->lock);
 	if (enable)
 		ret = scnprintf(buf, MAX_MSG_LEN,
-				"{class: lpm_mon, type: cxpc, dur: 1000, flush: 5, ts_adj: 1}");
+				"{class: lpm_mon, type: cxpc, dur: 1000, flush: 10, ts_adj: 1}");
 	else
 		ret = scnprintf(buf, MAX_MSG_LEN,
 				"{class: lpm_mon, type: cxpc, dur: 1000, flush: 1, log_once: 1}");
@@ -259,6 +259,7 @@ no_mem:
 	return -ENOMEM;
 }
 
+#if !IS_ENABLED(CONFIG_SEC_PM)
 static void vx_check_drv(struct vx_platform_data *pd)
 {
 	struct vx_log log;
@@ -283,6 +284,7 @@ static void vx_check_drv(struct vx_platform_data *pd)
 		kfree(log.data[i].drv_vx);
 	kfree(log.data);
 }
+#endif /* CONFIG_SEC_PM */
 
 static void show_vx_data(struct vx_platform_data *pd, struct vx_log *log,
 			 struct seq_file *seq)
@@ -357,6 +359,102 @@ static int vx_show(struct seq_file *seq, void *data)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_SEC_PM)
+struct vx_platform_data *local_pd;
+
+static int debug_show_vx_data(struct vx_platform_data *pd, struct vx_log *log)
+{
+	int i, j;
+	struct vx_header *hdr = &log->header;
+	struct vx_data *data;
+	char buf[255];
+	char *buf_ptr = buf;
+	u32 prev;
+	bool log_is_full = false;
+	int need_restart = 0;
+
+	printk(KERN_INFO "PM: CXSD blocker:\n");
+
+	if (log->loglines >= 36) {
+		log_is_full = true;
+		need_restart = 1;
+		i = 0;
+	} else {
+		i = (log->loglines < 11) ? 0 : (log->loglines - 11);
+	}
+
+	for ( ; i < log->loglines; i++) {
+		if (log_is_full) {
+			/* Show only multiples of 4 indexes */
+			if (i%4 != 0) continue;
+		}
+		
+		data = &log->data[i];
+		buf_ptr += sprintf(buf_ptr, "%*x|", 9, data->ts);
+
+		/* An all-zero line indicates we entered LPM */
+		for (j = 0, prev = data->drv_vx[0]; j < pd->ndrv; j++)
+			prev |= data->drv_vx[j];
+		if (!prev) {
+			buf_ptr += sprintf(buf_ptr, " %s Enter\n", MODE_STR(hdr->mode.type));
+			printk(KERN_INFO "%s", buf);
+			need_restart = 1;
+
+			buf[0] = '\0';
+			buf_ptr = buf;
+			continue;
+		}
+
+		/* Show non-zero items only */
+		for (j = 0; j < pd->ndrv; j++) {
+			if(data->drv_vx[j])
+				buf_ptr += sprintf(buf_ptr, " %s (%u)", pd->drvs[j], data->drv_vx[j]);
+		}
+		buf_ptr += sprintf(buf_ptr, "\n");
+		printk(KERN_INFO "%s", buf);
+
+		buf[0] = '\0';
+		buf_ptr = buf;
+	}
+
+	return need_restart;
+}
+
+static int debug_vx_show(void)
+{
+	struct vx_log log;
+	int ret;
+	int i;
+
+	/*
+	 * Read the data into memory to allow for
+	 * post processing of data and present it
+	 * cleanly.
+	 */
+	ret = read_vx_data(local_pd, &log);
+	if (ret)
+		return ret;
+
+	ret = debug_show_vx_data(local_pd, &log);
+
+	for (i = 0; i < log.loglines; i++)
+		kfree(log.data[i].drv_vx);
+	kfree(log.data);
+
+	return ret;
+}
+
+void vx_debug_enable(bool enable)
+{
+	mutex_lock(&local_pd->lock);
+	local_pd->debug_enable = enable;
+	mutex_unlock(&local_pd->lock);
+
+	subsystem_sleep_debug_enable(local_pd->debug_enable);
+}
+EXPORT_SYMBOL(vx_debug_enable);
+#endif /* CONFIG_SEC_PM */
+
 static int open_vx(struct inode *inode, struct file *file)
 {
 	return single_open(file, vx_show, inode->i_private);
@@ -423,6 +521,10 @@ static int vx_probe(struct platform_device *pdev)
 	}
 	pd->ndrv = i;
 	pd->drvs = drvs;
+
+#if IS_ENABLED(CONFIG_SEC_PM)
+	local_pd = pd;
+#endif /* CONFIG_SEC_PM */
 
 #if defined(CONFIG_DEBUG_FS)
 	ret = vx_create_debug_nodes(pd);
@@ -507,6 +609,9 @@ static int vx_resume(struct device *dev)
 	ktime_t time_delta_ms;
 	bool system_slept;
 	bool subsystem_slept;
+#if IS_ENABLED(CONFIG_SEC_PM)
+	int restart_flag = 0;
+#endif /* CONFIG_SEC_PM */
 
 	if (!pd->debug_enable)
 		return 0;
@@ -521,22 +626,36 @@ static int vx_resume(struct device *dev)
 		goto exit;
 
 	subsystem_slept = has_subsystem_slept();
+#if !IS_ENABLED(CONFIG_SEC_PM)
+	/* Note: In case of adsp_island, sleep count and time is always zero,
+	         so we don't use subsystem_slpet for decision */
 	if (!subsystem_slept)
 		goto exit;
+#endif /* CONFIG_SEC_PM */
 
 	/* if monitor was set last time check DRVs blocking system sleep */
 	if (pd->monitor_enable)
+#if IS_ENABLED(CONFIG_SEC_PM)
+	{
+		restart_flag = debug_vx_show();
+		if(restart_flag)
+			sys_pm_vx_send_msg(pd, true);
+	}
+#else
 		vx_check_drv(pd);
+#endif /* CONFIG_SEC_PM */
 	else
 		pd->monitor_enable = true;
 
 	return 0;
 
 exit:
+#if !IS_ENABLED(CONFIG_SEC_PM)
+	/* Note: log_once is not working and it was confirmed on case 05401576 */
 	if (pd->monitor_enable)
 		sys_pm_vx_send_msg(pd, false);
 	pd->monitor_enable = false;
-
+#endif /* CONFIG_SEC_PM */
 	return 0;
 }
 

@@ -282,6 +282,13 @@ config LSM
 
 	  If unsure, leave this as the default.
 
+config SDP_KEY_DUMP
+	bool "SDP KEY DUMP"
+	default n
+	help
+	For dumping sensitive keying material for CC Certification test.
+	Enabled only for eng and userdebug builds.
+
 source "security/Kconfig.hardening"
 
 endmenu

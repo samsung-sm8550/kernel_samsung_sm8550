@@ -693,6 +693,88 @@ static void pmic_gpio_config_dbg_show(struct pinctrl_dev *pctldev,
 	}
 }
 
+#if IS_ENABLED(CONFIG_SEC_GPIO_DUMP)
+#define MAX_PMIC	32
+static int pmic_count;
+static struct gpio_chip *pmic_gpio_chip[MAX_PMIC];
+
+static void pmic_gpio_sec_dbg_print(struct pinctrl_dev *pctldev)
+{
+	struct pmic_gpio_state *state = pinctrl_dev_get_drvdata(pctldev);
+	struct pmic_gpio_pad *pad;
+	int val, i, ret, function;
+
+	static const char *const biases[] = {
+		"pull-up 30uA", "pull-up 1.5uA", "pull-up 31.5uA",
+		"pull-up 1.5uA + 30uA boost", "pull-down 10uA", "no pull"
+	};
+	static const char *const buffer_types[] = {
+		"push-pull", "open-drain", "open-source"
+	};
+	static const char *const strengths[] = {
+		"no", "high", "medium", "low"
+	};
+
+	pr_info("%s: chip.label:%s\n", __func__, state->chip.label);
+
+	for (i = 0; i < state->chip.ngpio; i++) {
+		pad = pctldev->desc->pins[i].drv_data;
+		val = pmic_gpio_read(state, pad, PMIC_GPIO_REG_EN_CTL);
+		
+		if (val < 0 || !(val >> PMIC_GPIO_REG_MASTER_EN_SHIFT))
+			pr_info(" gpio%-2d: ---\n", i);
+		else {
+			if (pad->input_enabled) {
+				ret = pmic_gpio_read(state, pad, PMIC_MPP_REG_RT_STS);
+				if (ret < 0)
+					continue;
+
+				ret &= PMIC_MPP_REG_RT_STS_VAL_MASK;
+				pad->out_value = ret;
+			}
+
+			if (!pad->lv_mv_type &&
+				pad->function >= PMIC_GPIO_FUNC_INDEX_FUNC3) {
+				function = pad->function + (PMIC_GPIO_FUNC_INDEX_DTEST1 -
+					PMIC_GPIO_FUNC_INDEX_FUNC3);
+			} else {
+				function = pad->function;
+			}
+
+			pr_info(" gpio%-2d: %-7s %-4s vin-%d %-7s %-2s %-7s atest-%d dtest-%d\n",
+					i,
+					pmic_gpio_functions[function],
+					pad->output_enabled ? "OUT" : "IN",
+					pad->power_source,
+					biases[pad->pullup],
+					buffer_types[pad->buffer_type],
+					pad->out_value ? "H" : "L",
+					strengths[pad->strength],
+					pad->atest,
+					pad->dtest_buffer);
+		}
+	}
+
+	pr_info("\n");
+}
+
+static void pmic_gpio_sec_dbg_show(struct gpio_chip *chip)
+{
+	struct pmic_gpio_state *state = gpiochip_get_data(chip);
+
+	pmic_gpio_sec_dbg_print(state->ctrl);
+}
+
+void sec_pmic_gpio_debug_print(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < pmic_count; i++)
+		pmic_gpio_sec_dbg_show(pmic_gpio_chip[i]);
+}
+EXPORT_SYMBOL_GPL(sec_pmic_gpio_debug_print);
+#endif
+
 static const struct pinconf_ops pmic_gpio_pinconf_ops = {
 	.is_generic			= true,
 	.pin_config_group_get		= pmic_gpio_config_get,
@@ -1117,6 +1199,11 @@ static int pmic_gpio_probe(struct platform_device *pdev)
 	state->chip.of_gpio_n_cells = 2;
 	state->chip.can_sleep = false;
 
+#if IS_ENABLED(CONFIG_SEC_GPIO_DUMP)
+	pr_info("%s: [%d]chip.label:%s\n", __func__, pmic_count, state->chip.label);
+	pmic_gpio_chip[pmic_count++] = &(state->chip);
+#endif
+	
 	state->ctrl = devm_pinctrl_register(dev, pctrldesc, state);
 	if (IS_ERR(state->ctrl))
 		return PTR_ERR(state->ctrl);

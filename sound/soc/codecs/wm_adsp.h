@@ -53,6 +53,29 @@ struct wm_adsp_compr;
 struct wm_adsp_compr_buf;
 struct wm_adsp_ops;
 
+struct wm_adsp_buffer_region_def {
+	unsigned int mem_type;
+	unsigned int base_offset;
+	unsigned int size_offset;
+};
+
+struct wm_adsp_fw_caps {
+	u32 id;
+	struct snd_codec_desc desc;
+	int num_regions;
+	const struct wm_adsp_buffer_region_def *region_defs;
+};
+
+struct wm_adsp_fw_defs {
+	const char *file;
+	const char *binfile;
+	bool fullname;
+	int compr_direction;
+	int num_caps;
+	const struct wm_adsp_fw_caps *caps;
+	bool voice_trigger;
+};
+
 struct wm_adsp {
 	const char *part;
 	const char *name;
@@ -88,6 +111,13 @@ struct wm_adsp {
 	bool booted;
 	bool running;
 	bool fatal_error;
+	bool hibernate;
+
+	int num_firmwares;
+	struct wm_adsp_fw_defs *firmwares;
+
+	struct soc_enum fw_enum;
+	struct snd_kcontrol_new fw_ctrl;
 
 	struct list_head ctl_list;
 
@@ -105,7 +135,13 @@ struct wm_adsp {
 	char *wmfw_file_name;
 	char *bin_file_name;
 #endif
-
+	/*
+	 * Flag indicating the preloader widget only needs power toggled
+	 * on state change rather than held on for the duration of the
+	 * preload, useful for devices that can retain firmware memory
+	 * across power down.
+	 */
+	bool toggle_preload;
 };
 
 struct wm_adsp_ops {
@@ -211,5 +247,6 @@ int wm_adsp_write_ctl(struct wm_adsp *dsp, const char *name,  int type,
 		      unsigned int alg, void *buf, size_t len);
 int wm_adsp_read_ctl(struct wm_adsp *dsp, const char *name,  int type,
 		      unsigned int alg, void *buf, size_t len);
+int wm_adsp_load_coeff(struct wm_adsp *dsp);
 
 #endif

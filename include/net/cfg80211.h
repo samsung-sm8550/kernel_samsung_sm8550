@@ -26,6 +26,9 @@
 #include <linux/android_kabi.h>
 #include <net/regulatory.h>
 
+#define CFG80211_EXTERNAL_AUTH_TA_SUPPORT 1
+#define CFG80211_TID_LINK_MAP_SUPPORT 1
+
 /**
  * DOC: Introduction
  *
@@ -2544,6 +2547,36 @@ struct cfg80211_scan_6ghz_params {
 };
 
 /**
+ * struct tid_link_map - TID to links map information.
+ * @downlink: Downlink direction mapping of all the links for the given TID.
+ * Each bit in the bitmask represents a link ID. Bit is set to 1 in bitmap if
+ * the TID is mapped with the link ID in downlink direction. Otherwise, it
+ * is set to 0.
+ * @uplink: Uplink direction mapping of all the links for the given TID.
+ * Each bit in the bitmask represents a link ID. Bit is set to 1 in bitmap if
+ * the TID is mapped with the link ID in uplink direction. Otherwise, it is
+ * set to 0.
+ */
+struct tid_link_map {
+	u16 downlink;
+	u16 uplink;
+};
+
+/**
+ * struct cfg80211_mlo_tid_map - This structure defines MLO links and TIDs
+ * map information.
+ * @default_map: when set, means the TID-To-Link Mapping element represents the
+ * default TID-to-link mapping. See P802.11be_D3.0, 35.3.7.1.2 Default mapping
+ * mode.
+ * @t2lmap: In case of non-default mapping this provides per TID, MLO links
+ * mapping information.
+ */
+struct cfg80211_mlo_tid_map {
+	bool default_map;
+	struct tid_link_map t2lmap[IEEE80211_NUM_MLO_TIDS];
+};
+
+/**
  * struct cfg80211_scan_request - scan request description
  *
  * @ssids: SSIDs to scan for (active scan only)
@@ -3846,6 +3879,11 @@ struct cfg80211_pmk_conf {
  *	authentication frames sent or received via cfg80211. The driver
  *	translates the MLD addresses to/from link addresses based on the link
  *	chosen for the authentication.
+ * @tx_addr: Transmit address to use for current external authentication
+ *	request. Only valid for the authentication request event. Driver must
+ *	indicate support for randomizing transmit address of authentication
+ *	frames with %NL80211_EXT_FEATURE_AUTH_TX_RANDOM_TA to fill non-zero
+ *	value in this parameter.
  */
 struct cfg80211_external_auth_params {
 	enum nl80211_external_auth_action action;
@@ -3855,6 +3893,7 @@ struct cfg80211_external_auth_params {
 	u16 status;
 	const u8 *pmkid;
 	u8 mld_addr[ETH_ALEN] __aligned(2);
+	u8 tx_addr[ETH_ALEN] __aligned(2);
 
 	ANDROID_BACKPORT_RESERVED(1);
 	ANDROID_BACKPORT_RESERVED(2);
@@ -4551,6 +4590,8 @@ struct mgmt_frame_regs {
  * @add_link_station: Add a link to a station.
  * @mod_link_station: Modify a link of a station.
  * @del_link_station: Remove a link of a station.
+ *
+ * @get_link_tid_map_status: Get MLO links to TIDs mapping information.
  */
 struct cfg80211_ops {
 	int	(*suspend)(struct wiphy *wiphy, struct cfg80211_wowlan *wow);
@@ -4904,6 +4945,9 @@ struct cfg80211_ops {
 				    struct link_station_parameters *params);
 	int	(*del_link_station)(struct wiphy *wiphy, struct net_device *dev,
 				    struct link_station_del_parameters *params);
+	int	(*get_link_tid_map_status)(struct wiphy *wiphy,
+					   struct net_device *dev,
+					   struct cfg80211_mlo_tid_map *map);
 
 	ANDROID_BACKPORT_RESERVED(1);
 	ANDROID_BACKPORT_RESERVED(2);
@@ -9315,4 +9359,14 @@ static inline int cfg80211_color_change_notify(struct net_device *dev)
 bool cfg80211_valid_disable_subchannel_bitmap(u16 *bitmap,
 					      const struct cfg80211_chan_def *chandef);
 
+/*
+ * cfg80211_tid_to_link_map_change - notify tid to link map change
+ * @dev: the network device
+ * @map: the new tid to link map
+ *
+ * Inform the userspace about the tid to link map change received from AP either
+ * in the beacon, probe response or the action frames.
+ */
+void cfg80211_tid_to_link_map_change(struct net_device *dev,
+			       struct cfg80211_mlo_tid_map *map);
 #endif /* __NET_CFG80211_H */

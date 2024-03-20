@@ -1901,6 +1901,8 @@ static void dcc_sram_dev_exit(struct dcc_drvdata *drvdata)
 	dcc_sram_dev_deregister(drvdata);
 }
 
+static bool is_valid_for_sec_debug_level(const struct device_node *np);
+
 static int dcc_dt_parse(struct dcc_drvdata *drvdata, struct device_node *np)
 {
 	int i, ret = -1;
@@ -1908,6 +1910,12 @@ static int dcc_dt_parse(struct dcc_drvdata *drvdata, struct device_node *np)
 	uint32_t len, entry, val1, val2, apb_bus;
 	uint32_t curr_link_list;
 	const char *data_sink;
+
+	if (!is_valid_for_sec_debug_level(np)) {
+		dev_warn(drvdata->dev, "List not suitable for this debug level (%s)\n",
+				np->name);
+		return 0;	/* should return '0' to keep going. */
+	}
 
 	ret = of_property_read_u32(np, "qcom,curr-link-list",
 				&curr_link_list);
@@ -2382,3 +2390,22 @@ module_platform_driver(dcc_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("MSM data capture and compare engine");
+
+#if IS_ENABLED(CONFIG_SEC_QC_DEBUG)
+#include <linux/samsung/debug/sec_debug.h>
+#include <linux/samsung/sec_of.h>
+
+static bool is_valid_for_sec_debug_level(const struct device_node *node)
+{
+	unsigned int sec_dbg_level = sec_debug_level();
+	int err;
+
+	err = sec_of_test_debug_level(node, "sec,debug_level", sec_dbg_level);
+	if (err == -EINVAL)
+		return false;
+
+	return true;
+}
+#else
+static bool is_valid_for_sec_debug_level(const struct device_node *node) { return true; }
+#endif

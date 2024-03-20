@@ -722,6 +722,41 @@ static int pm8xxx_rtc_probe(struct platform_device *pdev)
 	return pm8xxx_rtc_init_alarm(rtc_dd);
 }
 
+
+#if IS_ENABLED(CONFIG_RTC_AUTO_PWRON)
+static struct rtc_wkalrm pwron_alarm;
+
+void pmic_rtc_setalarm(struct rtc_wkalrm *alm)
+{
+	memcpy(&pwron_alarm, alm, sizeof(struct rtc_wkalrm));
+}
+EXPORT_SYMBOL(pmic_rtc_setalarm);
+
+static void pm8xxx_rtc_shutdown(struct platform_device *pdev)
+{
+	struct rtc_wkalrm alarm;
+	int rc = 0;
+
+	if (pdev) {
+		pm8xxx_rtc_set_alarm(&pdev->dev, &pwron_alarm);
+		rc = pm8xxx_rtc_read_alarm(&pdev->dev, &alarm);
+		if (!rc) {
+			pr_info("%s: %d-%02d-%02d %02d:%02d:%02d\n", __func__,
+				alarm.time.tm_year + 1900, alarm.time.tm_mon + 1, alarm.time.tm_mday,
+				alarm.time.tm_hour, alarm.time.tm_min, alarm.time.tm_sec);
+		}
+	}
+	else
+		pr_err("%s: spmi device not found\n", __func__);
+}
+#else
+static void pm8xxx_rtc_shutdown(struct platform_device *pdev)
+{
+	struct pm8xxx_rtc *rtc_dd = platform_get_drvdata(pdev);
+
+	devm_free_irq(rtc_dd->rtc_dev, rtc_dd->rtc_alarm_irq, rtc_dd);
+}
+#endif
 static int pm8xxx_rtc_restore(struct device *dev)
 {
 	struct pm8xxx_rtc *rtc_dd = dev_get_drvdata(dev);
@@ -784,13 +819,6 @@ static const struct dev_pm_ops pm8xxx_rtc_pm_ops = {
 	.suspend = pm8xxx_rtc_suspend,
 	.resume = pm8xxx_rtc_resume,
 };
-
-static void pm8xxx_rtc_shutdown(struct platform_device *pdev)
-{
-	struct pm8xxx_rtc *rtc_dd = platform_get_drvdata(pdev);
-
-	devm_free_irq(rtc_dd->rtc_dev, rtc_dd->rtc_alarm_irq, rtc_dd);
-}
 
 static struct platform_driver pm8xxx_rtc_driver = {
 	.probe		= pm8xxx_rtc_probe,

@@ -1486,6 +1486,11 @@ static int type_read(struct policydb *p, struct symtab *s, void *fp)
 		goto bad;
 	return 0;
 bad:
+// [ SEC_SELINUX_PORTING_COMMON
+#ifndef CONFIG_ALWAYS_ENFORCE
+	panic("SELinux:Failed to type read");
+#endif /*CONFIG_ALWAYS_ENFORCE*/
+// ] SEC_SELINUX_PORTING_COMMON
 	type_destroy(key, typdatum, NULL);
 	return rc;
 }
@@ -2717,6 +2722,11 @@ out:
 bad:
 	kfree(rtk);
 	kfree(rtd);
+	// [ SEC_SELINUX_PORTING_COMMON
+#ifndef CONFIG_ALWAYS_ENFORCE
+	panic("SELinux:Failed to load policy");
+#endif /*CONFIG_ALWAYS_ENFORCE*/
+// ] SEC_SELINUX_PORTING_COMMON
 	policydb_destroy(p);
 	goto out;
 }

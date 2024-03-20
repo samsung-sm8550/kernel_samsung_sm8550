@@ -73,7 +73,7 @@ enum ufs_qcom_ber_mode {
 
 /* default value of auto suspend is 3 seconds */
 #define UFS_QCOM_AUTO_SUSPEND_DELAY	3000
-#define UFS_QCOM_CLK_GATING_DELAY_MS_PWR_SAVE	10
+#define UFS_QCOM_CLK_GATING_DELAY_MS_PWR_SAVE	20
 #define UFS_QCOM_CLK_GATING_DELAY_MS_PERF	50
 
 /* QCOM UFS host controller vendor specific registers */
@@ -612,6 +612,7 @@ struct ufs_qcom_host {
 	bool bypass_pbl_rst_wa;
 	struct notifier_block ufs_qcom_panic_nb;
 
+	bool skip_flush;
 };
 
 static inline u32

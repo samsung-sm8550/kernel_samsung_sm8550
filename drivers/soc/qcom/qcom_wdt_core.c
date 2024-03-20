@@ -674,6 +674,8 @@ static void qcom_wdt_user_pet_bite(struct timer_list *t)
 	}
 }
 
+static void __wdog_pet_call_notifier_chain(struct msm_watchdog_data *wdog_dd);
+
 static __ref int qcom_wdt_kthread(void *arg)
 {
 	struct msm_watchdog_data *wdog_dd = arg;
@@ -707,6 +709,8 @@ static __ref int qcom_wdt_kthread(void *arg)
 			delay_time = msecs_to_jiffies(wdog_dd->pet_time);
 			wdog_dd->ops->reset_wdt(wdog_dd);
 			wdog_dd->last_pet = sched_clock();
+
+			__wdog_pet_call_notifier_chain(wdog_dd);
 		}
 		/* Check again before scheduling
 		 * Could have been changed on other cpu
@@ -812,6 +816,8 @@ void qcom_wdt_trigger_bite(void)
 }
 EXPORT_SYMBOL(qcom_wdt_trigger_bite);
 
+static void __wdog_bark_call_notifier_chain(struct msm_watchdog_data *wdog_dd);
+
 static irqreturn_t qcom_wdt_bark_handler(int irq, void *dev_id)
 {
 	struct msm_watchdog_data *wdog_dd = dev_id;
@@ -830,6 +836,8 @@ static irqreturn_t qcom_wdt_bark_handler(int irq, void *dev_id)
 
 	if (wdog_dd->freeze_in_progress)
 		dev_info(wdog_dd->dev, "Suspend in progress\n");
+
+	__wdog_bark_call_notifier_chain(wdog_dd);
 
 	md_dump_process();
 	qcom_wdt_trigger_bite();
@@ -1044,3 +1052,46 @@ EXPORT_SYMBOL(qcom_wdt_register);
 
 MODULE_DESCRIPTION("QCOM Watchdog Driver Core");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_QCOM_WDT_CORE)
+static ATOMIC_NOTIFIER_HEAD(wdog_pet_notifier_list);
+
+int qcom_wdt_pet_register_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_register(&wdog_pet_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_wdt_pet_register_notifier);
+
+int qcom_wdt_pet_unregister_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&wdog_pet_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_wdt_pet_unregister_notifier);
+
+static void __wdog_pet_call_notifier_chain(struct msm_watchdog_data *wdog_dd)
+{
+	atomic_notifier_call_chain(&wdog_pet_notifier_list, 0, wdog_dd);
+}
+
+static ATOMIC_NOTIFIER_HEAD(wdog_bark_notifier_list);
+
+int qcom_wdt_bark_register_notifier(struct notifier_block *nb)
+{
+	return	atomic_notifier_chain_register(&wdog_bark_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_wdt_bark_register_notifier);
+
+int qcom_wdt_bark_unregister_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&wdog_bark_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_wdt_bark_unregister_notifier);
+
+static void __wdog_bark_call_notifier_chain(struct msm_watchdog_data *wdog_dd)
+{
+	atomic_notifier_call_chain(&wdog_bark_notifier_list, 0, wdog_dd);
+}
+#else
+static void __wdog_pet_call_notifier_chain(struct msm_watchdog_data *wdog_dd) {}
+static void __wdog_bark_call_notifier_chain(struct msm_watchdog_data *wdog_dd) {}
+#endif

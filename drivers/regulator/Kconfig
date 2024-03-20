@@ -32,7 +32,7 @@ config REGULATOR_DEBUG
 
 config REGULATOR_DEBUG_CONTROL
 	tristate "Regulator debug control support"
-	depends on DEBUG_FS
+	depends on DEBUG_FS || SEC_PM
 	help
 	  This driver supports debugfs based control of regulators for testing
 	  purposes.  It provides a mechanism to vote on the enable state,

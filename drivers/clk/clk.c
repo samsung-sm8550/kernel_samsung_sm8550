@@ -2287,6 +2287,21 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 		return -EBUSY;
 
 	/* calculate new rates and get the topmost changed clock */
+#if IS_ENABLED(CONFIG_DISPLAY_SAMSUNG)
+	top = clk_calc_new_rates(core, req_rate);
+	if (!top) {
+		if (!strcmp(core->name, "disp_cc_mdss_pclk0_clk"))
+			pr_err("%s: clk_calc_new_rates error disp_cc_mdss_pclk0_clk \n");
+		return -EINVAL;
+	}
+
+	ret = clk_pm_runtime_get(core);
+	if (ret) {
+		if (!strcmp(core->name, "disp_cc_mdss_pclk0_clk"))
+			pr_err("%s: clk_pm_runtime_get error disp_cc_mdss_pclk0_clk %d\n", ret);
+		return ret;
+	}
+#else
 	top = clk_calc_new_rates(core, req_rate);
 	if (!top)
 		return -EINVAL;
@@ -2294,6 +2309,7 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	ret = clk_pm_runtime_get(core);
 	if (ret)
 		return ret;
+#endif
 
 	/* notify that we are about to change rates */
 	fail_clk = clk_propagate_rate_change(top, PRE_RATE_CHANGE);

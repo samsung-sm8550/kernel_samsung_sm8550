@@ -16,6 +16,8 @@
 
 #include <asm/cputype.h>
 
+#include <linux/samsung/debug/qcom/sec_qc_user_reset.h>
+
 #include "edac_mc.h"
 #include "edac_device.h"
 
@@ -55,6 +57,8 @@
 #define KRYO_ERRXMISC_LVL(a)		((a >> 1) & 0x7)
 #define KRYO_ERRXMISC_LVL_GOLD(a)	(a & 0xF)
 #define KRYO_ERRXMISC_WAY(a)		((a >> 28) & 0xF)
+
+static void __edac_error_call_notifier_chain(int cpu, int block, int etype);
 
 static inline void set_errxctlr_el1(void)
 {
@@ -263,6 +267,9 @@ static void dump_err_reg(int errorcode, int level, u64 errxstatus, u64 errxmisc,
 			"Way: %d\n", (int) KRYO_ERRXMISC_WAY(errxmisc) >> 2);
 	errors[errorcode].func(edev_ctl, smp_processor_id(),
 				level, errors[errorcode].msg);
+
+	__edac_error_call_notifier_chain(level == L3 ? 0 : smp_processor_id(),
+			level, errorcode);
 }
 
 static void kryo_parse_l1_l2_cache_error(u64 errxstatus, u64 errxmisc,
@@ -366,6 +373,7 @@ static bool l3_is_bus_error(u64 errxstatus)
 {
 	if (KRYO_ERRXSTATUS_SERR(errxstatus) == BUS_ERROR) {
 		edac_printk(KERN_CRIT, EDAC_CPU, "Bus Error\n");
+		__edac_error_call_notifier_chain(0, ID_BUS_ERR, BUS_ERROR);
 		return true;
 	}
 
@@ -587,3 +595,50 @@ module_platform_driver(kryo_cpu_erp_driver);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Kryo EDAC driver");
+
+#if IS_ENABLED(CONFIG_SEC_QC_USER_RESET)
+#include <linux/samsung/debug/qcom/sec_qc_dbg_partition.h>
+#include <linux/samsung/debug/qcom/sec_qc_user_reset.h>
+
+static ap_health_t __health_early;
+static ap_health_t *health_early __read_mostly = &__health_early;
+
+static ATOMIC_NOTIFIER_HEAD(edac_error_notifier_list);
+
+ap_health_t *qcom_kryo_arm64_edac_error_register_notifier(struct notifier_block *nb)
+{
+	int err;
+	
+	err = atomic_notifier_chain_register(&edac_error_notifier_list, nb);
+	if (err)
+		return ERR_PTR(err);
+
+	/* error will not be sinked in a local early health data */
+	health_early = NULL;
+
+	return &__health_early;
+}
+EXPORT_SYMBOL(qcom_kryo_arm64_edac_error_register_notifier);
+
+int qcom_kryo_arm64_edac_error_unregister_notifier(struct notifier_block *nb)
+{
+	return atomic_notifier_chain_unregister(&edac_error_notifier_list, nb);
+}
+EXPORT_SYMBOL(qcom_kryo_arm64_edac_error_unregister_notifier);
+
+static void __edac_error_call_notifier_chain(int cpu, int block, int etype)
+{
+	struct kryo_arm64_edac_err_ctx ctx = {
+		.cpu = cpu,
+		.block = block,
+		.etype = etype,
+	};
+
+	if (unlikely(health_early))
+		sec_qc_kryo_arm64_edac_update(health_early, &ctx);
+	else
+		atomic_notifier_call_chain(&edac_error_notifier_list, 0, &ctx);
+}
+#else
+static void __edac_error_call_notifier_chain(int cpu, int block, int etype) {}
+#endif

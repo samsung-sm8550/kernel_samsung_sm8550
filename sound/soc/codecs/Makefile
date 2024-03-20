@@ -46,6 +46,7 @@ snd-soc-ak5558-objs := ak5558.o
 snd-soc-arizona-objs := arizona.o arizona-jack.o
 snd-soc-bd28623-objs := bd28623.o
 snd-soc-bt-sco-objs := bt-sco.o
+snd-soc-cirrus-amp-objs := cirrus-amp.o cirrus-bd.o cirrus-cal.o cirrus-pwr.o cirrus-cal-cspl.o cirrus-cal-cs35l43.o bigdata_cirrus_sysfs_cb.o
 snd-soc-cpcap-objs := cpcap.o
 snd-soc-cq93vc-objs := cq93vc.o
 snd-soc-cros-ec-codec-objs := cros_ec_codec.o
@@ -54,6 +55,10 @@ snd-soc-cs35l33-objs := cs35l33.o
 snd-soc-cs35l34-objs := cs35l34.o
 snd-soc-cs35l35-objs := cs35l35.o
 snd-soc-cs35l36-objs := cs35l36.o
+snd-soc-cs35l43-i2c-objs := cs35l43-i2c.o cs35l43.o cs35l43-tables.o
+snd-soc-cs35l43-spi-objs := cs35l43-spi.o cs35l43.o cs35l43-tables.o
+snd-soc-cs35l45-spi-objs := cs35l45-spi.o cs35l45.o cs35l45-tables.o
+snd-soc-cs35l45-i2c-objs := cs35l45-i2c.o cs35l45.o cs35l45-tables.o
 snd-soc-cs42l42-objs := cs42l42.o
 snd-soc-cs42l51-objs := cs42l51.o
 snd-soc-cs42l51-i2c-objs := cs42l51-i2c.o
@@ -379,6 +384,7 @@ obj-$(CONFIG_SND_SOC_ARIZONA)	+= snd-soc-arizona.o
 obj-$(CONFIG_SND_SOC_BD28623)	+= snd-soc-bd28623.o
 obj-$(CONFIG_SND_SOC_BT_SCO)	+= snd-soc-bt-sco.o
 obj-$(CONFIG_SND_SOC_CQ0093VC) += snd-soc-cq93vc.o
+obj-$(CONFIG_SND_SOC_CIRRUS_AMP) += snd-soc-cirrus-amp.o
 obj-$(CONFIG_SND_SOC_CPCAP)	+= snd-soc-cpcap.o
 obj-$(CONFIG_SND_SOC_CROS_EC_CODEC)	+= snd-soc-cros-ec-codec.o
 obj-$(CONFIG_SND_SOC_CS35L32)	+= snd-soc-cs35l32.o
@@ -386,6 +392,10 @@ obj-$(CONFIG_SND_SOC_CS35L33)	+= snd-soc-cs35l33.o
 obj-$(CONFIG_SND_SOC_CS35L34)	+= snd-soc-cs35l34.o
 obj-$(CONFIG_SND_SOC_CS35L35)	+= snd-soc-cs35l35.o
 obj-$(CONFIG_SND_SOC_CS35L36)	+= snd-soc-cs35l36.o
+obj-$(CONFIG_SND_SOC_CS35L43_I2C)	+= snd-soc-cs35l43-i2c.o
+obj-$(CONFIG_SND_SOC_CS35L43_SPI)	+= snd-soc-cs35l43-spi.o
+obj-$(CONFIG_SND_SOC_CS35L45_SPI)	+= snd-soc-cs35l45-spi.o
+obj-$(CONFIG_SND_SOC_CS35L45_I2C)	+= snd-soc-cs35l45-i2c.o
 obj-$(CONFIG_SND_SOC_CS42L42)	+= snd-soc-cs42l42.o
 obj-$(CONFIG_SND_SOC_CS42L51)	+= snd-soc-cs42l51.o
 obj-$(CONFIG_SND_SOC_CS42L51_I2C)	+= snd-soc-cs42l51-i2c.o
@@ -663,3 +673,7 @@ obj-$(CONFIG_SND_SOC_TAS5805M) += snd-soc-tas5805m.o
 
 # Mux
 obj-$(CONFIG_SND_SOC_SIMPLE_MUX)	+= snd-soc-simple-mux.o
+
+
+snd-soc-cs40l26-objs := cs40l26-a2h.o
+obj-$(CONFIG_SND_SOC_CS40L26)	+= snd-soc-cs40l26.o

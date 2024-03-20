@@ -1073,6 +1073,53 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	new->scm_io_uring = old->scm_io_uring;
 }
 
+char __skb_clone_log1[1000][512];
+int __skb_clone_log1_iter = 0;
+
+void __skb_clone_log(struct sk_buff *n, struct sk_buff *skb)
+{
+	struct timespec64 ts;
+
+	ktime_get_ts64(&ts);
+	snprintf(__skb_clone_log1[__skb_clone_log1_iter], 512,
+		"%s():%d %lld.%ld n %llx skb %llx\n",
+		__func__, __LINE__, ts.tv_sec, ts.tv_nsec, (u64)n, (u64)skb);
+	__skb_clone_log1_iter++;
+	if (__skb_clone_log1_iter > 999)
+		__skb_clone_log1_iter = 0;
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (skb->dev && !strstr(skb->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(skb, frag_iter) {
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)skb);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+
+	{
+		struct sk_buff *frag_iter;
+
+		if (n->dev && !strstr(n->dev->name, "rmnet_ipa")) {
+			skb_walk_frags(n, frag_iter) {
+				if (!skb_headlen(frag_iter) &&
+				(!skb_shinfo(frag_iter)->nr_frags ||
+				skb_shinfo(frag_iter)->frag_list)) {
+					pr_err("%s(): head_skb: 0x%llx\n",
+					__func__, (u64)n);
+					BUG_ON(1);
+				}
+			}
+		}
+	}
+}
 /*
  * You should not add any new code to this function.  Add it to
  * __copy_skb_header above instead.
@@ -1106,6 +1153,7 @@ static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 	atomic_inc(&(skb_shinfo(skb)->dataref));
 	skb->cloned = 1;
 
+	__skb_clone_log(n, skb);
 	return n;
 #undef C
 }
