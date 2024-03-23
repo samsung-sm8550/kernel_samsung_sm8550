@@ -160,6 +160,36 @@ static void cdsp_loader_unload(struct platform_device *pdev)
 	}
 }
 
+extern bool dump_enabled(void);
+extern void set_dump_enabled(int val);
+
+void cdsp_restart(struct work_struct *work)
+{
+	struct cdsp_loader_private *priv = NULL;
+	int prev_dump_collection = 0;
+
+	if (!IS_ERR_OR_NULL(cdsp_private)) {
+		pr_err("%s start", __func__);
+		priv = platform_get_drvdata(cdsp_private);
+
+		if (!priv)
+			return;
+
+		prev_dump_collection = dump_enabled();
+		set_dump_enabled(0);
+
+		pr_debug("%s: going to call rpoc_shutdown for cdsp\n", __func__);
+		rproc_shutdown(priv->pil_h);
+		msleep(800);
+		pr_debug("%s: going to call rproc_boot for cdsp\n", __func__);
+		rproc_boot(priv->pil_h);
+
+		set_dump_enabled(prev_dump_collection);
+		pr_err("%s end", __func__);
+	}
+}
+EXPORT_SYMBOL(cdsp_restart);
+
 static int cdsp_loader_init_sysfs(struct platform_device *pdev)
 {
 	int ret = -EINVAL;

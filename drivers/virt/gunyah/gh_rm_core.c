@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  */
 
@@ -165,8 +165,8 @@ gh_rm_init_connection_buff(struct gh_rm_connection *connection,
 	if (!payload_size)
 		return 0;
 
-	max_buf_size = (GH_MSGQ_MAX_MSG_SIZE_BYTES - hdr_size) *
-			(hdr->fragments + 1);
+	max_buf_size = payload_size +
+			(hdr->fragments * GH_RM_MAX_MSG_SIZE_BYTES);
 
 	if (payload_size > max_buf_size) {
 		pr_err("%s: Payload size exceeds max buff size\n", __func__);
@@ -908,7 +908,7 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 				goto out;
 
 			cap_id = (u64) res_entries[i].cap_id_high << 32 |
-					res_entries[i].cap_id_low;
+				res_entries[i].cap_id_low;
 			label = res_entries[i].resource_label;
 			if (gh_vcpu_affinity_set_fn)
 				do {
@@ -960,9 +960,8 @@ int gh_rm_populate_hyp_res(gh_vmid_t vmid, const char *vm_name)
 					GH_MSGQ_DIRECTION_RX, linux_irq);
 				break;
 			case GH_RM_RES_TYPE_VCPU:
-			/* Already populate VCPU resource */
+				/* Already populate VCPU resource */
 				break;
-
 			case GH_RM_RES_TYPE_DB_TX:
 				ret = gh_dbl_populate_cap_info(label, cap_id,
 					GH_MSGQ_DIRECTION_TX, linux_irq);

@@ -47,6 +47,38 @@ static DEFINE_MUTEX(nf_hook_mutex);
 #define nf_entry_dereference(e) \
 	rcu_dereference_protected(e, lockdep_is_held(&nf_hook_mutex))
 
+char nf_hook_entry_hookfn_log1[1000][512];
+int nf_hook_entry_hookfn_log1_iter = 0;
+
+void nf_hook_entry_hookfn_log(const struct nf_hook_entry *entry, struct sk_buff *skb)
+{
+	struct timespec64 ts;
+
+	ktime_get_ts64(&ts);
+	snprintf(nf_hook_entry_hookfn_log1[nf_hook_entry_hookfn_log1_iter], 512,
+		"%s():%d %lld.%ld skb %llx -> %pS\n",
+		__func__, __LINE__, ts.tv_sec, ts.tv_nsec,
+		(long long int)skb, entry->hook);
+	//pr_err("%s", nf_hook_entry_hookfn_log1[nf_hook_entry_hookfn_log1_iter]);
+	nf_hook_entry_hookfn_log1_iter++;
+	if (nf_hook_entry_hookfn_log1_iter > 999)
+		nf_hook_entry_hookfn_log1_iter = 0;
+	/* hook has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+					(u64)skb);
+				BUG_ON(1);
+			     }
+		}
+	}
+}
+
 static struct nf_hook_entries *allocate_hook_entries_size(u16 num)
 {
 	struct nf_hook_entries *e;

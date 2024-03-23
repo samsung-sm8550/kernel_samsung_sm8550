@@ -1410,6 +1410,7 @@ static size_t ieee802_11_find_bssid_profile(const u8 *start, size_t len,
 	for_each_element_id(elem, WLAN_EID_MULTIPLE_BSSID, start, len) {
 		if (elem->datalen < 2)
 			continue;
+
 		if (elem->data[0] < 1 || elem->data[0] > 8)
 			continue;
 
@@ -1523,7 +1524,7 @@ struct ieee802_11_elems *ieee802_11_parse_elems_crc(const u8 *start, size_t len,
 		elems->dtim_count = elems->bssid_index->dtim_count;
 
 	elems->crc = crc;
-
+	
 	return elems;
 }
 

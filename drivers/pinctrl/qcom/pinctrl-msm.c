@@ -35,6 +35,10 @@
 #include "pinctrl-msm.h"
 #include "../pinctrl-utils.h"
 
+#if IS_ENABLED(CONFIG_SEC_GPIO_DVS)
+#include "secgpio_dvs.h"
+#endif
+
 #define MAX_NR_GPIO 300
 #define MAX_NR_TILES 4
 #define DEFAULT_REG_SIZE_4K  1
@@ -694,6 +698,200 @@ static void msm_gpio_set(struct gpio_chip *chip, unsigned offset, int value)
 
 	raw_spin_unlock_irqrestore(&pctrl->lock, flags);
 }
+
+#if IS_ENABLED(CONFIG_SEC_GPIO_DUMP)
+struct gpiomux_setting {
+	int func;
+	int drv;
+	int pull;
+	int is_out;
+	int val;
+};
+
+void msm_gp_get_all(struct gpio_chip *chip, u32 pin_no, struct gpiomux_setting *set)
+{
+	const struct msm_pingroup *g;
+	struct msm_pinctrl *pctrl = gpiochip_get_data(chip);
+	u32 ctl_reg, io_reg;
+	int drive;
+
+	g = &pctrl->soc->groups[pin_no];
+
+	ctl_reg = msm_readl_ctl(pctrl, g);
+	io_reg = msm_readl_io(pctrl, g);
+
+	set->is_out = !!(ctl_reg & BIT(g->oe_bit));
+	set->func = (ctl_reg >> g->mux_bit) & 7;
+	drive = (ctl_reg >> g->drv_bit) & 7;	
+	set->drv = msm_regval_to_drive(drive);
+	set->pull = (ctl_reg >> g->pull_bit) & 3;
+
+	if (set->is_out)
+		set->val = !!(io_reg & BIT(g->out_bit));
+	else
+		set->val = !!(io_reg & BIT(g->in_bit));	
+}
+EXPORT_SYMBOL(msm_gp_get_all);
+
+#define AP_GPIO_MAX   210
+#define GET_RESULT_GPIO(a, b, c)	\
+	((a<<4 & 0xF0) | (b<<1 & 0xE) | (c & 0x1))
+
+#if IS_ENABLED(CONFIG_SEC_GPIO_DVS)
+/****************************************************************/
+/* Pre-defined variables. (DO NOT CHANGE THIS!!) */
+static unsigned char checkgpiomap_result[GDVS_PHONE_STATUS_MAX][AP_GPIO_MAX];
+static struct gpiomap_result gpiomap_result = {
+	.init = checkgpiomap_result[PHONE_INIT],
+	.sleep = checkgpiomap_result[PHONE_SLEEP]
+};
+	
+static void msm_check_gpio_status(unsigned char phonestate)
+{
+	struct gpio_chip *gp;
+	struct gpiomux_setting set;
+	int i;
+	u8 temp_io = 0, temp_pdpu = 0, temp_lh = 0;
+
+	if (!msm_pinctrl_data) {
+		pr_err("pinctrl data is not available\n");
+		return;
+	}
+
+	gp = &msm_pinctrl_data->chip;
+
+	pr_info("[dvs_%s] state : %s\n", __func__,
+		(phonestate == PHONE_INIT) ? "init" : "sleep");
+
+	for (i = 0; i < AP_GPIO_MAX; i++) {
+		/* If it is not valid gpio or secure, Shows IN/PD/L */
+		if (!gpiochip_line_is_valid(gp, i)) {
+			checkgpiomap_result[phonestate][i] =
+				GET_RESULT_GPIO(0x1, 0x1, 0x0);
+			continue;
+		}
+		
+		msm_gp_get_all(gp, i, &set);
+
+		if (set.func == 0) {
+			if (set.is_out)
+				temp_io = 0x02;	/* GPIO_OUT */
+			else
+				temp_io = 0x01;	/* GPIO_IN */
+		} else
+			temp_io = 0x0;		/* FUNC */
+
+		switch (set.pull) {
+		case MSM_NO_PULL:
+			temp_pdpu = 0x00;
+			break;
+		case MSM_PULL_DOWN:
+			temp_pdpu = 0x01;
+			break;
+		/* 
+		 * gpiodvs is only for samsung,
+		 * so pull definition could be different from original value.
+		 * gpiodvs definition: PU(0x2), KEEPER(0x3)
+		 */
+		case MSM_PULL_UP:
+			temp_pdpu = 0x02;
+			break;
+		case MSM_KEEPER:
+			temp_pdpu = 0x03;
+			break;
+		default:
+			temp_pdpu = 0x07;
+			break;
+		}
+
+		temp_lh = set.val;
+
+		checkgpiomap_result[phonestate][i] =
+			GET_RESULT_GPIO(temp_io, temp_pdpu, temp_lh);
+	}
+
+	pr_info("[dvs_%s]-\n", __func__);
+}
+
+static struct gpio_dvs_t msm_gpio_dvs = {
+	.result = &gpiomap_result,
+	.check_gpio_status = msm_check_gpio_status,
+	.count = AP_GPIO_MAX,
+	.check_sleep = false,
+};
+
+const struct secgpio_dvs_data msm_gpio_dvs_data = {
+	.gpio_dvs = &msm_gpio_dvs,
+};
+EXPORT_SYMBOL_GPL(msm_gpio_dvs_data);
+#endif /* CONFIG_SEC_GPIO_DVS */
+
+static const char * const gpiomux_func_str[] = {
+	"GPIO",
+	"Func_1",
+	"Func_2",
+	"Func_3",
+	"Func_4",
+	"Func_5",
+	"Func_6",
+	"Func_7",
+	"Func_8",
+	"Func_9",
+	"Func_a",
+	"Func_b",
+	"Func_c",
+	"Func_d",
+	"Func_e",
+	"Func_f",
+};
+
+static const char * const gpiomux_pull_str[] = {
+	"PULL_NONE",
+	"PULL_DOWN",
+	"PULL_KEEPER",
+	"PULL_UP",
+};
+
+static const char * const gpiomux_dir_str[] = {
+	"IN",
+	"OUT",
+};
+
+static const char * const gpiomux_val_str[] = {
+	"LOW",
+	"HIGH",
+};
+
+void sec_ap_gpio_debug_print(void)
+{
+	struct gpio_chip *gp;
+	struct gpiomux_setting set = {0,};
+	int i;
+
+	if (!msm_pinctrl_data) {
+		pr_err("pinctrl data is not available\n");
+		return;
+	}
+
+	gp = &msm_pinctrl_data->chip;
+
+	for (i = 0; i < AP_GPIO_MAX; i++) {
+		if(!gpiochip_line_is_valid(gp, i))
+			continue;
+
+		msm_gp_get_all(gp, i, &set);
+
+        pr_info("GPIO[%u] %10s %10s %13s DRV_%dmA %10s\n",
+				i,
+				gpiomux_func_str[set.func],
+                gpiomux_dir_str[set.is_out],
+                gpiomux_pull_str[set.pull],
+                set.drv,
+                gpiomux_val_str[set.val]);
+	}
+}
+EXPORT_SYMBOL(sec_ap_gpio_debug_print);
+#endif /* CONFIG_SEC_GPIO_DUMP */
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>

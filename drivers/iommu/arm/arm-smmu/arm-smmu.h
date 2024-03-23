@@ -335,6 +335,7 @@ struct arm_smmu_power_resources {
 
 	int (*resume)(struct arm_smmu_power_resources *pwr);
 	void (*suspend)(struct arm_smmu_power_resources *pwr);
+
 };
 
 struct arm_smmu_s2cr {

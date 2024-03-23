@@ -68,6 +68,22 @@ static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 
 int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	/* PRE_ROUTING chain has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
+
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
@@ -294,6 +310,21 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 {
 	struct net *net = dev_net(skb->dev);
 
+	/* IP6 RCV start */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	skb = ip6_rcv_core(skb, dev, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
@@ -462,6 +493,21 @@ discard:
 
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	/* LOCAL_IN chain has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	rcu_read_lock();
 	ip6_protocol_deliver_rcu(net, skb, 0, false);
 	rcu_read_unlock();

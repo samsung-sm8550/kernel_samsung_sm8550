@@ -220,6 +220,38 @@ struct ipt_entry *ipt_next_entry(const struct ipt_entry *entry)
 	return (void *)entry + entry->next_offset;
 }
 
+char ipt_do_table_target_log1[1000][512];
+int ipt_do_table_target_log1_iter = 0;
+
+void ipt_do_table_target_log(const struct xt_entry_target *t, struct sk_buff *skb)
+{
+	struct timespec64 ts;
+
+	ktime_get_ts64(&ts);
+	snprintf(ipt_do_table_target_log1[ipt_do_table_target_log1_iter], 512,
+		"%s():%d %lld.%ld skb %llx -> %pS\n",
+		__func__, __LINE__, ts.tv_sec, ts.tv_nsec,
+		(long long int)skb, t->u.kernel.target->target);
+	//pr_err("%s", ipt_do_table_target_log1[ipt_do_table_target_log1_iter]);
+	ipt_do_table_target_log1_iter++;
+	if (ipt_do_table_target_log1_iter > 999)
+		ipt_do_table_target_log1_iter = 0;
+	/* hook has finished */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+					(u64)skb);
+				BUG_ON(1);
+			     }
+		}
+	}
+}
+
 /* Returns one of the generic firewall policies, like NF_ACCEPT. */
 unsigned int
 ipt_do_table(struct sk_buff *skb,
@@ -344,6 +376,7 @@ ipt_do_table(struct sk_buff *skb,
 		acpar.targinfo = t->data;
 
 		verdict = t->u.kernel.target->target(skb, &acpar);
+		ipt_do_table_target_log(t, skb);
 		if (verdict == XT_CONTINUE) {
 			/* Target might have changed stuff. */
 			ip = ip_hdr(skb);

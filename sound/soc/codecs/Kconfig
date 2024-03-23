@@ -61,6 +61,8 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_CS35L34
 	imply SND_SOC_CS35L35
 	imply SND_SOC_CS35L36
+	imply SND_SOC_CS35L45_SPI
+	imply SND_SOC_CS35L45_I2C
 	imply SND_SOC_CS42L42
 	imply SND_SOC_CS42L51_I2C
 	imply SND_SOC_CS42L52
@@ -335,11 +337,13 @@ config SND_SOC_WM_ADSP
 	default y if SND_SOC_WM5102=y
 	default y if SND_SOC_WM5110=y
 	default y if SND_SOC_WM2200=y
+	default y if SND_SOC_CS35L43=y
 	default m if SND_SOC_MADERA=m
 	default m if SND_SOC_CS47L24=m
 	default m if SND_SOC_WM5102=m
 	default m if SND_SOC_WM5110=m
 	default m if SND_SOC_WM2200=m
+	default m if SND_SOC_CS35L43=m
 
 config SND_SOC_AB8500_CODEC
 	tristate
@@ -565,6 +569,14 @@ config SND_SOC_BD28623
 config SND_SOC_BT_SCO
 	tristate "Dummy BT SCO codec driver"
 
+config SND_SOC_CIRRUS_AMP
+	tristate "Cirrus Logic Amp Feature drivers"
+	help
+	  Enable support for Cirrus Logic smart speaker amplifier factory
+	  driver. Supports various smart amp functions, such as firmware
+	  calibration, data logging, etc. Compatible with CS35L40 and CS35L46
+	  amplifiers.
+
 config SND_SOC_CPCAP
 	tristate "Motorola CPCAP codec"
 	depends on MFD_CPCAP
@@ -600,6 +612,47 @@ config SND_SOC_CS35L35
 config SND_SOC_CS35L36
 	tristate "Cirrus Logic CS35L36 CODEC"
 	depends on I2C
+
+config SND_SOC_CS35L43
+	tristate "Cirrus Logic CS35L43 CODEC"
+
+config SND_SOC_CS35L43_I2C
+	tristate "Cirrus Logic CS35L43 CODEC (I2C)"
+	depends on I2C
+	select REGMAP_I2C
+	select SND_SOC_CS35L43
+
+config SND_SOC_CS35L43_SPI
+	tristate "Cirrus Logic CS35L43 CODEC (SPI)"
+	depends on SPI_MASTER
+	select REGMAP_SPI
+	select SND_SOC_CS35L43
+
+config SND_SOC_CS35L45
+	tristate "Cirrus Logic CS35L45 CODEC"
+	depends on SND_SOC_CS35L45_SPI || SND_SOC_CS35L45_I2C
+	select SND_SOC_WM_ADSP
+	select REGMAP_IRQ
+	help
+	  Enable support for Cirrus Logic CS35L45 smart speaker amplifier.
+	  This amplifier supports control over I2C, SPI, and SoundWire.
+	  PCM audio streaming supported over I2S/TDM and SoundWire.
+	  Intended for use with Cirrus Logic WM ADSP framework.
+
+config SND_SOC_CS35L45_SPI
+	tristate "Cirrus Logic CS35L45 CODEC (SPI)"
+	depends on SPI_MASTER
+	select SND_SOC_CS35L45
+	select REGMAP_SPI
+
+config SND_SOC_CS35L45_I2C
+	tristate "Cirrus Logic CS35L45 CODEC (I2C)"
+	depends on I2C
+	select SND_SOC_CS35L45
+	select REGMAP_I2C
+
+config SND_SOC_CIRRUS_REINIT_SYSFS
+	tristate "Cirrus Logic Amp SysFS Reinit"
 
 config SND_SOC_CS42L42
 	tristate "Cirrus Logic CS42L42 CODEC"
@@ -1948,3 +2001,7 @@ config SND_SOC_TAS5805M
 	depends on I2C
 
 endmenu
+
+config SND_SOC_CS40L26
+	tristate "Cirrus Logic CS40L26 Stub CODEC"
+

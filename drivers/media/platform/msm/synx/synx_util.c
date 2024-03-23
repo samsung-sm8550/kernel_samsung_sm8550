@@ -183,6 +183,9 @@ void synx_util_object_destroy(struct synx_coredata *synx_obj)
 			pr_err("de-registration fail id: %d, type: %u, err: %d\n",
 				sync_id, type, rc);
 			continue;
+		} else {
+			pr_info("obj_dstry deregistered data: %u sync_id: %d\n",
+				data, sync_id);
 		}
 
 		/*
@@ -194,8 +197,8 @@ void synx_util_object_destroy(struct synx_coredata *synx_obj)
 	}
 
 	mutex_destroy(&synx_obj->obj_lock);
-	kfree(synx_obj);
 	pr_debug("released synx object %pK\n", synx_obj);
+	kfree(synx_obj);
 }
 
 long synx_util_get_free_handle(unsigned long *bitmap, unsigned int size)
@@ -587,8 +590,8 @@ struct synx_handle_coredata *synx_util_acquire_handle(
 		pr_err("[sess: %u] stale object handle %d\n",
 			client->id, h_synx);
 	} else if (synx_data->rel_count == 0) {
-		pr_err("[sess: %u] released object handle %d\n",
-			client->id, h_synx);
+		pr_err("%s: [sess: %u] released object handle %d in_ref %d\n",
+			__func__, client->id, h_synx, synx_data->internal_refcount);
 	} else if (!kref_read(&synx_data->internal_refcount)) {
 		pr_err("[sess: %u] destroyed object handle %d\n",
 			client->id, h_synx);
@@ -667,6 +670,7 @@ int synx_util_update_handle(struct synx_client *client,
 
 static void synx_util_destroy_handle(struct synx_handle_coredata *synx_data)
 {
+	s32 h_synx = synx_data->handle;
 	long idx = synx_util_handle_index(synx_data->handle);
 	struct synx_client *client = synx_data->client;
 	struct synx_coredata *synx_obj = synx_data->synx_obj;
@@ -675,7 +679,7 @@ static void synx_util_destroy_handle(struct synx_handle_coredata *synx_data)
 	clear_bit(idx, client->bitmap);
 	synx_util_put_object(synx_obj);
 	pr_debug("[sess: %u] handle %d destroyed %pK\n",
-		client->id, idx, synx_obj);
+		client->id, h_synx, synx_obj);
 }
 
 void synx_util_destroy_import_handle(struct kref *kref)

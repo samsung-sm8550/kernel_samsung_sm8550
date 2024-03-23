@@ -295,6 +295,10 @@ static inline u16 ieee80211_sn_sub(u16 sn1, u16 sn2)
 
 #define IEEE80211_HT_CTL_LEN		4
 
+/* No.of TIDs for TID-to-link mapping, see P802.11be_D3.0, 35.3.7.1
+ * TID-to-link mapping */
+#define IEEE80211_NUM_MLO_TIDS	8
+
 struct ieee80211_hdr {
 	__le16 frame_control;
 	__le16 duration_id;

@@ -20,4 +20,11 @@ config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
 
+comment "PowerManagement Feature"
+menuconfig SEC_PM
+	bool "Samsung PowerManagement Feature"
+	default n
+	help
+	  Samsung PowerManagement Feature.
+
 source "drivers/hwtracing/coresight/Kconfig"

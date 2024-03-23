@@ -170,7 +170,7 @@ static int reset_sprs_dump_table(struct device *dev)
  *
  * Returns 0 on success, or -ENOMEM on error of no enough memory.
  */
-static int update_reg_dump_table(struct device *dev, u32 core_reg_num)
+static inline int __update_reg_dump_table(struct device *dev, u32 core_reg_num)
 {
 	int ret = 0;
 	u32 system_regs_input_index = SYSTEM_REGS_INPUT_INDEX +
@@ -208,6 +208,30 @@ static int update_reg_dump_table(struct device *dev, u32 core_reg_num)
 err:
 	mutex_unlock(&cpudata->mutex);
 	return ret;
+}
+
+static inline u32 __core_reg_num_max(const struct cpuss_dump_data *cpudata)
+{
+	const u32 size = cpudata->cpussregdata->size;
+	u32 system_regs_input_index_max;
+
+	if (size == 0)
+		return 0;
+
+	system_regs_input_index_max = (size - 1) / sizeof(uint32_t) - 1;
+
+	return (system_regs_input_index_max - SYSTEM_REGS_INPUT_INDEX) / 2;
+}
+
+static int update_reg_dump_table(struct device *dev, u32 core_reg_num)
+{
+	struct cpuss_dump_data *cpudata = dev_get_drvdata(dev);
+	const u32 core_reg_num_max = __core_reg_num_max(cpudata);
+
+	if (core_reg_num > core_reg_num_max)
+		return -ENOMEM;
+
+	return __update_reg_dump_table(dev, core_reg_num);
 }
 
 static ssize_t core_reg_num_show(struct device *dev,
@@ -1050,6 +1074,9 @@ static int cpuss_dump_init(struct platform_device *pdev,
 	return initialized;
 }
 
+static bool test_sec_debug_level(const struct device_node *node);
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node, bool matched_debug_level);
+
 #define MSM_DUMP_DATA_SIZE sizeof(struct msm_dump_data)
 static int mem_dump_alloc(struct platform_device *pdev)
 {
@@ -1069,6 +1096,7 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	uint32_t ns_vm_perms[] = {PERM_READ | PERM_WRITE};
 	u64 shm_bridge_handle;
 	int initialized = 0;
+	bool matched_debug_level = test_sec_debug_level(node);
 
 	if (mem_dump_reserve_mem(&pdev->dev) != 0)
 		return -ENOMEM;
@@ -1076,6 +1104,12 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	/* For dump table registration with IMEM */
 	total_size = sizeof(struct msm_dump_table) * 2;
 	for_each_available_child_of_node(node, child_node) {
+		if (!test_sec_eneable_any_debug_level(child_node, matched_debug_level)) {
+			dev_dbg(&pdev->dev, "Skip for current debug levle - %s\n",
+					child_node->name);
+			continue;
+		}
+
 		ret = of_property_read_u32(child_node, "qcom,dump-size", &size);
 		if (ret) {
 			dev_err(&pdev->dev, "Unable to find size for %s\n",
@@ -1128,6 +1162,9 @@ static int mem_dump_alloc(struct platform_device *pdev)
 	dump_vaddr += (sizeof(struct msm_dump_table) * 2);
 	phys_addr += (sizeof(struct msm_dump_table) * 2);
 	for_each_available_child_of_node(node, child_node) {
+		if (!test_sec_eneable_any_debug_level(child_node, matched_debug_level))
+			continue;
+
 		ret = of_property_read_u32(child_node, "qcom,dump-size", &size);
 		if (ret)
 			continue;
@@ -1205,3 +1242,46 @@ module_platform_driver(mem_dump_driver);
 
 MODULE_DESCRIPTION("Memory Dump V2 Driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_SUMMARY)
+#include <linux/samsung/debug/qcom/sec_qc_summary.h>
+
+void sec_qc_summary_set_msm_memdump_info(struct sec_qc_summary_data_apss *apss)
+{
+	apss->msm_memdump_paddr = (uint64_t)memdump.table_phys;
+	pr_info("%s : 0x%llx\n", __func__, apss->msm_memdump_paddr);
+}
+EXPORT_SYMBOL(sec_qc_summary_set_msm_memdump_info);
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_QC_DEBUG)
+#include <linux/samsung/debug/sec_debug.h>
+#include <linux/samsung/sec_of.h>
+
+static bool test_sec_debug_level(const struct device_node *node)
+{
+	unsigned int sec_dbg_level = sec_debug_level();
+	int err;
+
+	err = sec_of_test_debug_level(node, "sec,debug_level", sec_dbg_level);
+	if (err == -EINVAL)
+		return false;
+
+	return true;
+}
+
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node,
+		bool matched_debug_level)
+{
+	if (matched_debug_level)
+		return true;
+
+	if (of_property_read_bool(child_node, "sec,eneable-any_debug_level"))
+		return true;
+
+	return false;
+}
+#else
+static bool test_sec_debug_level(const struct device_node *node) { return true; }
+static bool test_sec_eneable_any_debug_level(const struct device_node *child_node, bool matched_debug_level) { return true; }
+#endif

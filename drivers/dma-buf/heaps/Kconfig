@@ -106,3 +106,12 @@ config QCOM_DMABUF_HEAPS_TUI_CARVEOUT
 	  This heap is controlled from an ioctl, and memory is transferred
 	  to it from the Primary VM. Not GKI-Compatible as it cannot
 	  be built as a module.
+
+config RBIN
+	bool "DMA-BUF RBIN Samsung Heap"
+	depends on DMABUF_HEAPS && CLEANCACHE
+	default m
+	help
+	  Choose this option to enable dma-buf rbin heap for samsung.
+	  This heap supports both dmabuf allocation for camera and
+	  operations for cleancache backend.

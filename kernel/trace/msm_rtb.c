@@ -369,3 +369,43 @@ static struct platform_driver msm_rtb_driver = {
 module_platform_driver(msm_rtb_driver);
 MODULE_DESCRIPTION("Register Trace Buffer(RTB) driver");
 MODULE_LICENSE("GPL v2");
+
+#if IS_ENABLED(CONFIG_SEC_QC_SUMMARY)
+#include <linux/samsung/debug/qcom/sec_qc_summary.h>
+
+#define __set_rtb_state_info(name, member) \
+	apss->iolog.rtb_state.name.size = sizeof(msm_rtb_ptr->member); \
+	apss->iolog.rtb_state.name.offset = \
+			offsetof(struct msm_rtb_state, member)
+#define __set_rtb_entry_info(name, member) \
+	apss->iolog.rtb_entry.name.size = \
+			sizeof(((struct msm_rtb_layout *)0)->member); \
+	apss->iolog.rtb_entry.name.offset = \
+			offsetof(struct msm_rtb_layout, member)
+
+void sec_qc_summary_set_rtb_info(struct sec_qc_summary_data_apss *apss)
+{
+	if (!msm_rtb_ptr) {
+		pr_warn("%s(): msm_rtb is not available.\n");
+		return;
+	}
+
+	apss->iolog.rtb_state_pa = (uint64_t)(msm_rtb_ptr->phys - sizeof(*msm_rtb_ptr));
+
+	__set_rtb_state_info(rtb_phys, phys);
+	__set_rtb_state_info(nentries, nentries);
+	__set_rtb_state_info(size, size);
+	__set_rtb_state_info(enabled, enabled);
+	__set_rtb_state_info(initialized, initialized);
+	__set_rtb_state_info(step_size, step_size);
+
+	apss->iolog.rtb_entry.struct_size = sizeof(struct msm_rtb_layout);
+	__set_rtb_entry_info(log_type, log_type);
+	__set_rtb_entry_info(idx, idx);
+	__set_rtb_entry_info(caller, caller);
+	__set_rtb_entry_info(data, data);
+	__set_rtb_entry_info(timestamp, timestamp);
+	__set_rtb_entry_info(cycle_count, cycle_count);
+}
+EXPORT_SYMBOL(sec_qc_summary_set_rtb_info);
+#endif

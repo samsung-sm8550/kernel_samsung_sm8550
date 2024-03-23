@@ -1089,6 +1089,21 @@ void udp_v6_early_demux(struct sk_buff *skb)
 
 INDIRECT_CALLABLE_SCOPE int udpv6_rcv(struct sk_buff *skb)
 {
+	/* UDP RCV start */
+	{
+		struct sk_buff *frag_iter;
+
+		skb_walk_frags(skb, frag_iter) {
+			if (!skb_headlen(frag_iter) &&
+			    (!skb_shinfo(frag_iter)->nr_frags ||
+			     skb_shinfo(frag_iter)->frag_list)) {
+				pr_err("%s(): head_skb: 0x%llx\n", __func__,
+				       (u64)skb);
+				BUG_ON(1);
+			}
+		}
+	}
+
 	return __udp6_lib_rcv(skb, &udp_table, IPPROTO_UDP);
 }
 

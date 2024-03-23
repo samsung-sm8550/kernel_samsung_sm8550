@@ -46,7 +46,7 @@ static bool error_occurred;
  * Cut off the warnings when there are too many. This typically occurs when
  * vmlinux is missing. ('make modules' without building vmlinux.)
  */
-#define MAX_UNRESOLVED_REPORTS	10
+#define MAX_UNRESOLVED_REPORTS	50
 static unsigned int nr_unresolved;
 
 enum export {
