@@ -9,6 +9,25 @@
 #include <sound/soc.h>
 #include <sound/pcm.h>
 
+#ifdef CONFIG_COMMON_AMP_CIRRUS
+#define CLK_SRC_SCLK 0
+#define CLK_SRC_LRCLK 1
+#define CLK_SRC_PDM 2
+#define CLK_SRC_SELF 3
+#define CLK_SRC_MCLK 4
+#define CLK_SRC_SWIRE 5
+#define CLK_SRC_DAI 0
+#define CLK_SRC_CODEC 1
+
+#define CS35L43_MONO   0x31
+#define CS35L43_STEREO 0x32
+#define CS35L43_QUAD    0x34
+
+#define CS35L45_MONO   0x51
+#define CS35L45_STEREO 0x52
+#define CS35L45_QUAD    0x54
+#endif
+
 enum {
 	MI2S = 0,
 	TDM,

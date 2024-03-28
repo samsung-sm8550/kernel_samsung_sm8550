@@ -413,6 +413,26 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/Build_external_kernelmodule.mk
 endif
+ifeq ($(PROJECT_NAME),$(filter $(PROJECT_NAME),b5q e5q))
+###########################################################
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := $(AUDIO_SRC_FILES)
+LOCAL_MODULE := tfa9878_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME := asoc/codecs/tfa9878/tfa9878_dlkm.ko
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+###########################################################
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := $(AUDIO_SRC_FILES)
+LOCAL_MODULE := tfa9878_sysfs_dlkm.ko
+LOCAL_MODULE_KBUILD_NAME := asoc/codecs/tfa9878/tfa9878_sysfs_dlkm.ko
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/Build_external_kernelmodule.mk
+endif
 ###########################################################
 endif # DLKM check
 endif # supported target check

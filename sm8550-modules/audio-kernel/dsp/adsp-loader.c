@@ -20,12 +20,24 @@
 #include <linux/remoteproc.h>
 #include <linux/remoteproc/qcom_rproc.h>
 
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+#include <sound/samsung/snd_debug_proc.h>
+#endif
+
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#include <linux/adsp/ssc_ssr_reason.h>
+#endif
 
 #define Q6_PIL_GET_DELAY_MS 100
 #define BOOT_CMD 1
 #define SSR_RESET_CMD 1
 #define IMAGE_UNLOAD_CMD 0
 #define MAX_FW_IMAGES 4
+
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+#define SSR_FORCE_RESET_CMD 9
+#define MAX_SSR_MSG_LENGTH 60
+#endif
 
 enum spf_subsys_state {
 	SPF_SUBSYS_DOWN,
@@ -143,6 +155,10 @@ load_adsp:
 			if (rc) {
 				dev_err(&pdev->dev, "%s: pil get failed,\n",
 					__func__);
+#if IS_ENABLED(CONFIG_SND_SOC_SAMSUNG_AUDIO)
+				sdp_boot_print("%s: ADSP loadig is failed = %d\n",
+					__func__, rc);
+#endif
 				goto fail;
 			}
 		} else if (adsp_state == SPF_SUBSYS_LOADED) {
@@ -172,6 +188,9 @@ static ssize_t adsp_ssr_store(struct kobject *kobj,
 	struct rproc *adsp_dev = NULL;
 	struct platform_device *pdev = adsp_private;
 	struct adsp_loader_private *priv = NULL;
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	char msg[MAX_SSR_MSG_LENGTH] = {0 ,};
+#endif
 
 	dev_dbg(&pdev->dev, "%s: going to call adsp ssr\n ", __func__);
 
@@ -182,7 +201,11 @@ static ssize_t adsp_ssr_store(struct kobject *kobj,
 	if (kstrtoint(buf, 10, &ssr_command) < 0)
 		return -EINVAL;
 
-	if (ssr_command != SSR_RESET_CMD)
+	if (ssr_command != SSR_RESET_CMD
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+		&& ssr_command != SSR_FORCE_RESET_CMD
+#endif
+	)
 		return -EINVAL;
 
 	adsp_dev = (struct rproc *)priv->pil_h;
@@ -190,7 +213,10 @@ static ssize_t adsp_ssr_store(struct kobject *kobj,
 		return -EINVAL;
 
 	dev_err(&pdev->dev, "requesting for ADSP restart\n");
-
+#if IS_ENABLED(CONFIG_SEC_SENSORS_SSC)
+	scnprintf(msg, MAX_SSR_MSG_LENGTH, "%s, err : %d", "Something went wrong with ADSP, restarting", ssr_command);
+	ssr_reason_call_back(msg, strlen(msg) + 1);
+#endif
 	rproc_shutdown(adsp_dev);
 	adsp_loader_do(adsp_private);
 

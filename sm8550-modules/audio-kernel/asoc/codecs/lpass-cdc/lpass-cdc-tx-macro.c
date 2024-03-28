@@ -104,6 +104,19 @@ enum {
 	VA_MCLK,
 };
 
+/* Based on 9.6MHZ MCLK Freq */
+enum {
+	CLK_DISABLED = 0,
+	CLK_2P4MHZ,
+	CLK_0P6MHZ,
+};
+
+static int dmic_clk_rate_div[] = {
+	[CLK_DISABLED] = 0,
+	[CLK_2P4MHZ] = LPASS_CDC_TX_MACRO_CLK_DIV_4,
+	[CLK_0P6MHZ] = LPASS_CDC_TX_MACRO_CLK_DIV_16,
+};
+
 struct lpass_cdc_tx_macro_reg_mask_val {
 	u16 reg;
 	u8 mask;
@@ -149,7 +162,14 @@ struct lpass_cdc_tx_macro_priv {
 	int pcm_rate[NUM_DECIMATORS];
 	bool swr_dmic_enable;
 	int wlock_holders;
+	u32 dmic_rate_override;
 };
+
+static const char* const dmic_rate_override_text[] = {
+	"DISABLED", "CLK_2P4MHZ", "CLK_0P6MHZ"
+};
+
+static SOC_ENUM_SINGLE_EXT_DECL(dmic_rate_enum, dmic_rate_override_text);
 
 static int lpass_cdc_tx_macro_wake_enable(struct lpass_cdc_tx_macro_priv *tx_priv,
 					bool wake_enable)
@@ -200,6 +220,42 @@ static bool lpass_cdc_tx_macro_get_data(struct snd_soc_component *component,
 	}
 
 	return true;
+}
+
+static int lpass_cdc_dmic_rate_override_get(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+			snd_soc_kcontrol_component(kcontrol);
+	struct lpass_cdc_tx_macro_priv *tx_priv = NULL;
+	struct device *tx_dev = NULL;
+
+	if (!lpass_cdc_tx_macro_get_data(component, &tx_dev, &tx_priv, __func__))
+		return -EINVAL;
+
+	ucontrol->value.enumerated.item[0] = tx_priv->dmic_rate_override;
+	dev_dbg(component->dev, "%s: dmic rate: %d\n",
+		__func__, tx_priv->dmic_rate_override);
+
+	return 0;
+}
+
+static int lpass_cdc_dmic_rate_override_put(struct snd_kcontrol *kcontrol,
+				  struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+			snd_soc_kcontrol_component(kcontrol);
+	struct lpass_cdc_tx_macro_priv *tx_priv = NULL;
+	struct device *tx_dev = NULL;
+
+	if (!lpass_cdc_tx_macro_get_data(component, &tx_dev, &tx_priv, __func__))
+		return -EINVAL;
+
+	tx_priv->dmic_rate_override = ucontrol->value.enumerated.item[0];
+	dev_dbg(component->dev, "%s: dmic rate: %d\n",
+		__func__, tx_priv->dmic_rate_override);
+
+	return 0;
 }
 
 static int lpass_cdc_tx_macro_mclk_enable(
@@ -1859,6 +1915,9 @@ static const struct snd_kcontrol_new lpass_cdc_tx_macro_snd_controls[] = {
 
 	SOC_ENUM_EXT("BCS CH_SEL", bcs_ch_sel_mux_enum,
 		     lpass_cdc_tx_macro_get_bcs_ch_sel, lpass_cdc_tx_macro_put_bcs_ch_sel),
+
+	SOC_ENUM_EXT("DMIC_RATE OVERRIDE", dmic_rate_enum,
+			lpass_cdc_dmic_rate_override_get, lpass_cdc_dmic_rate_override_put),
 };
 
 static int lpass_cdc_tx_macro_clk_div_get(struct snd_soc_component *component)
@@ -1869,6 +1928,9 @@ static int lpass_cdc_tx_macro_clk_div_get(struct snd_soc_component *component)
 	if (!lpass_cdc_tx_macro_get_data(component, &tx_dev, &tx_priv, __func__))
 		return -EINVAL;
 
+	if (tx_priv->dmic_rate_override)
+		return dmic_clk_rate_div[tx_priv->dmic_rate_override];
+		
 	return (int)tx_priv->dmic_clk_div;
 }
 
@@ -1925,6 +1987,9 @@ undefined_rate:
 static const struct lpass_cdc_tx_macro_reg_mask_val
 				lpass_cdc_tx_macro_reg_init[] = {
 	{LPASS_CDC_TX0_TX_PATH_SEC7, 0x3F, 0x0A},
+	{LPASS_CDC_TX0_TX_PATH_CFG1, 0x0F, 0x0A},
+	{LPASS_CDC_TX1_TX_PATH_CFG1, 0x0F, 0x0A},
+	{LPASS_CDC_TX2_TX_PATH_CFG1, 0x0F, 0x0A},
 };
 
 static int lpass_cdc_tx_macro_init(struct snd_soc_component *component)
